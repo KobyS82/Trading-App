@@ -34,11 +34,19 @@ def get_prediction():
     spy['Today_Pct_Change'] = spy['Close'].pct_change() * 100
     spy['Target_NextDay_Pct'] = spy['Today_Pct_Change'].shift(-1)
     
+    # --- Updated Feature Engineering in main.py ---
+    # Calculate Price Gains and Losses for RSI
+    delta = spy['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    spy['RSI'] = 100 - (100 / (1 + rs))
+    
     today_data = spy.tail(1).copy() 
     train_data = spy.dropna().copy()
     
     # 3. Train the model
-    features = ['SMA_50', 'Today_Pct_Change']
+    features = ['SMA_50', 'Today_Pct_Change', 'RSI']
     model = LinearRegression()
     model.fit(train_data[features], train_data['Target_NextDay_Pct'])
     

@@ -62,7 +62,7 @@
         async function getPrediction() {
             try {
                 // This calls your FastAPI backend!
-                const response = await fetch('http://127.0.0.1:8000/predict');
+                const response = await fetch('/predict');
                 const data = await response.json();
 
                 document.getElementById('symbol').innerText = data.symbol + " Dashboard";
