@@ -11,16 +11,18 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             display: flex;
             justify-content: center;
-            align-items: center;
-            height: 100vh;
+            align-items: flex-start;
+            min-height: 100vh;
             margin: 0;
+            padding: 2rem 1rem;
+            box-sizing: border-box;
         }
         .card {
             background-color: #161b22;
             border: 1px solid #30363d;
             border-radius: 8px;
             padding: 2rem;
-            width: 350px;
+            width: 400px;
             text-align: center;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         }
@@ -34,6 +36,40 @@
         }
         .up { color: #3fb950; background: rgba(63, 185, 80, 0.1); }
         .down { color: #f85149; background: rgba(248, 81, 73, 0.1); }
+
+        /* Symbol input row */
+        .symbol-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        .symbol-row input {
+            flex: 1;
+            padding: 0.5rem;
+            background: #0d1117;
+            color: white;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 1rem;
+            text-transform: uppercase;
+        }
+        .symbol-row button {
+            margin: 0;
+            padding: 0.5rem 1rem;
+        }
+
+        select, input {
+            margin-bottom: 0.5rem;
+            padding: 0.5rem;
+            background: #0d1117;
+            color: white;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            width: 100%;
+            font-weight: bold;
+            box-sizing: border-box;
+        }
         button {
             background-color: #238636;
             color: white;
@@ -43,67 +79,127 @@
             cursor: pointer;
             margin-top: 1.5rem;
             font-weight: bold;
+            width: 100%;
         }
         button:hover { background-color: #2ea043; }
+
+        /* Info panel */
+        .info-panel {
+            margin-top: 1.5rem;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 0.75rem 1rem;
+            text-align: left;
+            font-size: 0.82rem;
+            color: #8b949e;
+        }
+        .info-panel summary {
+            cursor: pointer;
+            color: #58a6ff;
+            font-weight: bold;
+            font-size: 0.85rem;
+            list-style: none;
+        }
+        .info-panel summary::-webkit-details-marker { display: none; }
+        .info-panel summary::before { content: "▶ "; font-size: 0.7rem; }
+        details[open] summary::before { content: "▼ "; }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            border-bottom: 1px solid #21262d;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #8b949e; }
+        .info-value { color: #c9d1d9; font-weight: bold; }
+
+        /* Footer notes */
+        .footnotes {
+            margin-top: 1.5rem;
+            font-size: 0.75rem;
+            color: #484f58;
+            text-align: left;
+            line-height: 1.5;
+            border-top: 1px solid #21262d;
+            padding-top: 1rem;
+        }
+        .footnotes p { margin: 0.25rem 0; }
     </style>
 </head>
 <body>
-
     <div class="card">
         <h1 id="symbol">Loading...</h1>
-        
-        <select id="model-select" onchange="getPrediction()" style="margin-bottom: 0.5rem; padding: 0.5rem; background: #0d1117; color: white; border: 1px solid #30363d; border-radius: 4px; width: 100%; font-weight: bold;">
+
+        <!-- Symbol input -->
+        <div class="symbol-row">
+            <input type="text" id="symbol-input" value="SPY" maxlength="5" placeholder="Ticker" />
+            <button onclick="getPrediction()" style="width:auto; margin-top:0;">Go</button>
+        </div>
+
+        <select id="model-select" onchange="getPrediction()">
             <option value="linear">Model: Linear Regression (Calc 3)</option>
             <option value="rf">Model: Random Forest (Advanced)</option>
         </select>
 
-        <select id="horizon-select" onchange="getPrediction()" style="margin-bottom: 1rem; padding: 0.5rem; background: #0d1117; color: white; border: 1px solid #30363d; border-radius: 4px; width: 100%; font-weight: bold;">
-        </select>
+        <select id="horizon-select" onchange="getPrediction()"></select>
 
         <div class="price" id="price">--</div>
+
         <div id="prediction-container">
             <span id="prediction-text">Predicting movement...</span>
         </div>
+
+        <div id="conf-val" style="margin-top:0.5rem; font-size:0.9rem; color:#8b949e;"></div>
+
+        <!-- Collapsible info panel -->
+        <div class="info-panel">
+            <details>
+                <summary>Calculation Details</summary>
+                <div id="info-rows" style="margin-top: 0.5rem;"></div>
+            </details>
+        </div>
+
         <button onclick="getPrediction()">Refresh Prediction</button>
+
+        <!-- Footer notes -->
+        <div class="footnotes">
+            <p>⚠️ <strong>Linear Regression</strong> confidence is in-sample R² and tends to be overstated — treat it as a rough fit score, not a real-world accuracy measure.</p>
+            <p>✅ <strong>Random Forest</strong> confidence uses Out-of-Bag (OOB) scoring, which is validated on data the model never trained on — a closer proxy to real-world performance.</p>
+        </div>
     </div>
 
     <script>
-        // --- SMART CALENDAR LOGIC ---
         function populateExpirations() {
             const select = document.getElementById('horizon-select');
-            
-            // Helper to count only market-open days (Mon-Fri)
+
             function getTradingDays(calendarDaysAhead) {
                 let count = 0;
                 let d = new Date();
                 for(let i = 0; i < calendarDaysAhead; i++) {
                     d.setDate(d.getDate() + 1);
-                    if(d.getDay() !== 0 && d.getDay() !== 6) { // Skip Sun & Sat
-                        count++;
-                    }
+                    if(d.getDay() !== 0 && d.getDay() !== 6) count++;
                 }
                 return count;
             }
 
             const today = new Date();
-            const dayOfWeek = today.getDay(); // 0=Sun, 5=Fri
-            
-            // Calculate calendar days until this coming Friday
+            const dayOfWeek = today.getDay();
             let daysToFriday = (5 - dayOfWeek + 7) % 7;
-            if (daysToFriday === 0) daysToFriday = 7; // If today is Friday, target next week
-            
+            if (daysToFriday === 0) daysToFriday = 7;
+
             const eowTradingDays = getTradingDays(daysToFriday);
             const nextEowTradingDays = getTradingDays(daysToFriday + 7);
-            
+
             const options = [
                 { value: 1, label: "1 Trading Day (Tomorrow)" },
                 { value: eowTradingDays, label: `End of This Week (${eowTradingDays} Trading Days left)` },
                 { value: nextEowTradingDays, label: `End of Next Week (${nextEowTradingDays} Trading Days left)` },
                 { value: 21, label: "Standard Options Month (21 Trading Days)" }
             ];
-            
+
             options.forEach(opt => {
-                if(opt.value > 0) { // Prevent weird 0-day glitches
+                if(opt.value > 0) {
                     const el = document.createElement('option');
                     el.value = opt.value;
                     el.innerText = opt.label;
@@ -114,30 +210,32 @@
         populateExpirations();
 
         async function getPrediction() {
+            const selectedModel = document.getElementById('model-select').value;
+            const selectedHorizon = document.getElementById('horizon-select').value;
+            const selectedSymbol = document.getElementById('symbol-input').value.trim().toUpperCase() || 'SPY';
+
+            document.getElementById('symbol').innerText = selectedSymbol + " Dashboard";
+            document.getElementById('price').innerText = "Loading...";
+            document.getElementById('prediction-text').innerText = "Predicting...";
+            document.getElementById('prediction-text').className = "prediction";
+
             try {
-                const selectedModel = document.getElementById('model-select').value;
-                const selectedHorizon = document.getElementById('horizon-select').value;
-                
-                // FIXED: Now it detects localhost OR if you just double-clicked the file
-                const isLocal = window.location.hostname === "127.0.0.1" || 
-                                window.location.hostname === "localhost" || 
+                // Use "uvicorn api.main:app --reload" in terminal to run the backend server on localhost:8000. Open by runing index.html in browser.
+                const isLocal = window.location.hostname === "127.0.0.1" ||
+                                window.location.hostname === "localhost" ||
                                 window.location.protocol === "file:";
-                                
                 const baseUrl = isLocal ? "http://127.0.0.1:8000" : "";
-                
-                // Fetch using the smart URL
-                const response = await fetch(`${baseUrl}/predict?model=${selectedModel}&horizon=${selectedHorizon}`);
+
+                const response = await fetch(`${baseUrl}/predict?model=${selectedModel}&horizon=${selectedHorizon}&symbol=${selectedSymbol}`);
                 const data = await response.json();
 
                 document.getElementById('symbol').innerText = data.symbol + " Dashboard";
                 document.getElementById('price').innerText = "$" + data.current_price;
-                
+
                 const predEl = document.getElementById('prediction-text');
                 const pct = data.predicted_change_pct;
-                
-                // Dynamically change the text based on timeframe
                 const timeText = data.horizon_days == 1 ? "Tomorrow" : `In ${data.horizon_days} Days`;
-                
+
                 if (pct >= 0) {
                     predEl.innerText = `${timeText}: +${pct}%`;
                     predEl.className = "prediction up";
@@ -146,21 +244,26 @@
                     predEl.className = "prediction down";
                 }
 
-                const confEl = document.getElementById('conf-val'); 
-                if(confEl) {
-                    confEl.innerText = "Confidence: " + data.confidence + "%";
-                } else {
-                    const newConfEl = document.createElement('div');
-                    newConfEl.id = 'conf-val';
-                    newConfEl.style.marginTop = '0.5rem';
-                    newConfEl.style.fontSize = '0.9rem';
-                    newConfEl.style.color = '#8b949e';
-                    newConfEl.innerText = "Confidence: " + data.confidence + "%";
-                    document.getElementById('prediction-container').appendChild(newConfEl);
-                }
+                document.getElementById('conf-val').innerText = "Confidence: " + data.confidence + "%";
+
+                // Populate info panel
+                const infoRows = document.getElementById('info-rows');
+                const oobLine = data.oob_score !== null
+                    ? `<div class="info-row"><span class="info-label">OOB Score</span><span class="info-value">${data.oob_score}%</span></div>`
+                    : '';
+
+                infoRows.innerHTML = `
+                    <div class="info-row"><span class="info-label">Training Rows</span><span class="info-value">${data.training_rows.toLocaleString()} days</span></div>
+                    <div class="info-row"><span class="info-label">Data From</span><span class="info-value">${data.training_start}</span></div>
+                    <div class="info-row"><span class="info-label">Data To</span><span class="info-value">${data.training_end}</span></div>
+                    <div class="info-row"><span class="info-label">Features Used</span><span class="info-value">${data.features_used}</span></div>
+                    ${oobLine}
+                `;
+
             } catch (error) {
                 console.error("Error fetching prediction:", error);
                 document.getElementById('symbol').innerText = "Backend Offline";
+                document.getElementById('price').innerText = "--";
             }
         }
 
