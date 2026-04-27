@@ -22,18 +22,30 @@ def get_prediction():
     print("API called: Running prediction engine...")
     
     # 1. Pull data
-    spy = yf.download('SPY', period='1y', progress=False, auto_adjust=True)
+    spy = yf.download('SPY', period='max', progress=False, auto_adjust=True)
+    # For performance, we can limit to the most recent 2500 rows (about 10 years of daily data)
+    spy = spy.tail(2500)
     
     # This flattens the columns so 'Close' is just a simple string again
     if isinstance(spy.columns, pd.MultiIndex):
         spy.columns = spy.columns.get_level_values(0)
     
     # 2. Engineer features
+        # SMA_50: 50-day Simple Moving Average
     spy['SMA_50'] = spy['Close'].rolling(window=50).mean()
     spy['Today_Pct_Change'] = spy['Close'].pct_change() * 100
     spy['Target_NextDay_Pct'] = spy['Today_Pct_Change'].shift(-1)
     
-    # --- Updated Feature Engineering in main.py ---
+        # Vol_Change: Volume Momentum (Today's Volume vs Yesterday's)
+    spy['Vol_Change'] = spy['Volume'].pct_change() * 100
+    
+        # Daily_Range: (High - Low) as a percentage of Close
+    spy['Daily_Range'] = (spy['High'] - spy['Low']) / spy['Close'] * 100
+    
+        # SMA_200 and Distance from it: A common long-term trend indicator
+    spy['SMA_200'] = spy['Close'].rolling(window=200).mean()
+    spy['Dist_From_200'] = (spy['Close'] - spy['SMA_200']) / spy['SMA_200'] * 100
+
     # Calculate Price Gains and Losses for RSI
     delta = spy['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
@@ -45,7 +57,7 @@ def get_prediction():
     train_data = spy.dropna().copy()
     
     # 3. Train the model
-    features = ['SMA_50', 'Today_Pct_Change', 'RSI']
+    features = ['SMA_50', 'Today_Pct_Change', 'RSI', 'Vol_Change', 'Daily_Range', 'Dist_From_200']
     model = LinearRegression()
     model.fit(train_data[features], train_data['Target_NextDay_Pct'])
     
@@ -55,9 +67,6 @@ def get_prediction():
     # 4. Predict
     prediction = model.predict(today_data[features])
     
-    # --- USE .item() HERE ---
-    # .item() is a special function that says: 
-    # "I don't care if you're a Series, an Array, or a List—if you only have ONE value, give it to me as a native number."
     pred_val = prediction.item() 
     price_val = today_data['Close'].item()
     

@@ -62,7 +62,9 @@
         async function getPrediction() {
             try {
                 // This calls your FastAPI backend!
-                const response = await fetch('/predict');
+                // const response = await fetch('/predict');
+                // USE '/predict' when pushing to Vercel. Local testing you will need 'http://127.0.0.1:8000/predict'
+                const response = await fetch('http://127.0.0.1:8000/predict');
                 const data = await response.json();
 
                 document.getElementById('symbol').innerText = data.symbol + " Dashboard";
@@ -73,7 +75,7 @@
 
                 const confEl = document.getElementById('conf-val'); 
                 if(confEl) {
-                    confEl.innerText = data.confidence + "%";
+                    confEl.innerText = "Confidence: " + data.confidence + "%";
                 } else {
                     const newConfEl = document.createElement('div');
                     newConfEl.id = 'conf-val';
