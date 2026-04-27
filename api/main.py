@@ -67,6 +67,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"status": "ok"}
+
 @app.get("/predict")
 def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY"):
     print(f"API called: Running {model} engine for {symbol} over {horizon} day(s)...")

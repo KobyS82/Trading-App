@@ -367,7 +367,7 @@
                 const isLocal = window.location.hostname === "127.0.0.1" ||
                                 window.location.hostname === "localhost" ||
                                 window.location.protocol === "file:";
-                const baseUrl = isLocal ? "http://127.0.0.1:8000" : PROD_API_URL;
+                const baseUrl = (isLocal ? "http://127.0.0.1:8000" : PROD_API_URL).replace(/\/$/, "");
 
                 const response = await fetch(`${baseUrl}/predict?model=${selectedModel}&horizon=${selectedHorizon}&symbol=${selectedSymbol}`);
                 const data = await response.json();
