@@ -174,7 +174,7 @@
         <select id="model-select" onchange="getPrediction()">
             <option value="linear">Model: Linear Regression (Calc 3)</option>
             <option value="rf">Model: Random Forest (Advanced)</option>
-            <option value="xgb" selected>Model: XGBoost (Best)</option>
+            <option value="lgb" selected>Model: LightGBM (Best)</option>
         </select>
 
         <select id="horizon-select" onchange="getPrediction()"></select>
@@ -361,11 +361,13 @@
             document.getElementById('prediction-text').className = "prediction";
 
             try {
-                // Use "uvicorn api.main:app --reload" in terminal to run the backend server on localhost:8000. Open by runing index.html in browser.
+                // Local dev: "uvicorn api.main:app --reload" runs backend on localhost:8000
+                // Production: API is hosted on Render — replace the URL below with your Render service URL after deploy
+                const PROD_API_URL = "https://YOUR-APP-NAME.onrender.com";
                 const isLocal = window.location.hostname === "127.0.0.1" ||
                                 window.location.hostname === "localhost" ||
                                 window.location.protocol === "file:";
-                const baseUrl = isLocal ? "http://127.0.0.1:8000" : "";
+                const baseUrl = isLocal ? "http://127.0.0.1:8000" : PROD_API_URL;
 
                 const response = await fetch(`${baseUrl}/predict?model=${selectedModel}&horizon=${selectedHorizon}&symbol=${selectedSymbol}`);
                 const data = await response.json();

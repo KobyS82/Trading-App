@@ -4,7 +4,7 @@ import yfinance as yf
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
-from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
 from textblob import TextBlob
 
 
@@ -15,12 +15,12 @@ def build_model(name: str):
             n_estimators=200, random_state=42, oob_score=True,
             max_depth=6, min_samples_leaf=5, max_features="sqrt"
         ), "Random Forest"
-    if name == "xgb":
-        return XGBRegressor(
+    if name == "lgb":
+        return LGBMRegressor(
             n_estimators=300, max_depth=4, learning_rate=0.05,
-            subsample=0.8, colsample_bytree=0.8, random_state=42,
-            n_jobs=1, verbosity=0
-        ), "XGBoost"
+            subsample=0.8, subsample_freq=1, colsample_bytree=0.8,
+            random_state=42, n_jobs=1, verbose=-1
+        ), "LightGBM"
     return LinearRegression(), "Linear Regression"
 
 

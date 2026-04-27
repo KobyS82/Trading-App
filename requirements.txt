@@ -3,5 +3,5 @@ uvicorn
 yfinance
 pandas
 scikit-learn
-xgboost
+lightgbm
 textblob
