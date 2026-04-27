@@ -115,12 +115,18 @@
 
         async function getPrediction() {
             try {
-                // Grab both selected values
                 const selectedModel = document.getElementById('model-select').value;
                 const selectedHorizon = document.getElementById('horizon-select').value;
                 
-                // Add BOTH parameters to the URL
-                const response = await fetch(`http://127.0.0.1:8000/predict?model=${selectedModel}&horizon=${selectedHorizon}`);
+                // FIXED: Now it detects localhost OR if you just double-clicked the file
+                const isLocal = window.location.hostname === "127.0.0.1" || 
+                                window.location.hostname === "localhost" || 
+                                window.location.protocol === "file:";
+                                
+                const baseUrl = isLocal ? "http://127.0.0.1:8000" : "";
+                
+                // Fetch using the smart URL
+                const response = await fetch(`${baseUrl}/predict?model=${selectedModel}&horizon=${selectedHorizon}`);
                 const data = await response.json();
 
                 document.getElementById('symbol').innerText = data.symbol + " Dashboard";

@@ -1,6 +1,18 @@
 {
+  "builds": [
+    {
+      "src": "api/main.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
+  ],
   "rewrites": [
-    { "source": "/predict", "destination": "/api/main" },
-    { "source": "/(.*)", "destination": "/$1" }
+    {
+      "source": "/predict",
+      "destination": "/api/main.py"
+    }
   ]
 }
