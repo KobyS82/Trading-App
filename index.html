@@ -58,9 +58,6 @@
         </select>
 
         <select id="horizon-select" onchange="getPrediction()" style="margin-bottom: 1rem; padding: 0.5rem; background: #0d1117; color: white; border: 1px solid #30363d; border-radius: 4px; width: 100%; font-weight: bold;">
-            <option value="1">Timeframe: 1 Day (Tomorrow)</option>
-            <option value="5">Timeframe: 5 Days (1 Week)</option>
-            <option value="21">Timeframe: 21 Days (1 Month)</option>
         </select>
 
         <div class="price" id="price">--</div>
@@ -71,6 +68,51 @@
     </div>
 
     <script>
+        // --- SMART CALENDAR LOGIC ---
+        function populateExpirations() {
+            const select = document.getElementById('horizon-select');
+            
+            // Helper to count only market-open days (Mon-Fri)
+            function getTradingDays(calendarDaysAhead) {
+                let count = 0;
+                let d = new Date();
+                for(let i = 0; i < calendarDaysAhead; i++) {
+                    d.setDate(d.getDate() + 1);
+                    if(d.getDay() !== 0 && d.getDay() !== 6) { // Skip Sun & Sat
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            const today = new Date();
+            const dayOfWeek = today.getDay(); // 0=Sun, 5=Fri
+            
+            // Calculate calendar days until this coming Friday
+            let daysToFriday = (5 - dayOfWeek + 7) % 7;
+            if (daysToFriday === 0) daysToFriday = 7; // If today is Friday, target next week
+            
+            const eowTradingDays = getTradingDays(daysToFriday);
+            const nextEowTradingDays = getTradingDays(daysToFriday + 7);
+            
+            const options = [
+                { value: 1, label: "1 Trading Day (Tomorrow)" },
+                { value: eowTradingDays, label: `End of This Week (${eowTradingDays} Trading Days left)` },
+                { value: nextEowTradingDays, label: `End of Next Week (${nextEowTradingDays} Trading Days left)` },
+                { value: 21, label: "Standard Options Month (21 Trading Days)" }
+            ];
+            
+            options.forEach(opt => {
+                if(opt.value > 0) { // Prevent weird 0-day glitches
+                    const el = document.createElement('option');
+                    el.value = opt.value;
+                    el.innerText = opt.label;
+                    select.appendChild(el);
+                }
+            });
+        }
+        populateExpirations();
+
         async function getPrediction() {
             try {
                 // Grab both selected values
