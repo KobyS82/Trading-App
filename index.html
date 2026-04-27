@@ -221,6 +221,26 @@
         .news-headline:last-child { border-bottom: none; }
         .sentiment-summary { font-size: 0.78rem; color: #8b949e; margin-top: 0.4rem; }
 
+        /* ── TRACK RECORD ── */
+        .track-summary {
+            font-size: 0.78rem; color: #8b949e;
+            padding: 0.4rem 0.6rem; margin-bottom: 0.5rem;
+            background: rgba(88,166,255,0.07); border: 1px solid rgba(88,166,255,0.2);
+            border-radius: 4px; line-height: 1.4;
+        }
+        .track-summary strong { color: #c9d1d9; }
+        .track-row {
+            display: grid;
+            grid-template-columns: 1rem 5.2rem 1fr 1fr;
+            gap: 0.5rem; align-items: center;
+            padding: 0.3rem 0; border-bottom: 1px solid #21262d;
+            font-size: 0.75rem;
+        }
+        .track-row:last-child { border-bottom: none; }
+        .track-row .check { font-weight: 700; text-align: center; }
+        .track-row .date  { color: #8b949e; font-variant-numeric: tabular-nums; }
+        .track-row .num   { font-weight: 600; font-variant-numeric: tabular-nums; }
+
         /* ── INFO PANEL ── */
         .info-row {
             display: flex; justify-content: space-between; align-items: center;
@@ -339,8 +359,19 @@
 
     <div class="divider"></div>
 
-    <!-- NEWS (collapsible) -->
+    <!-- TRACK RECORD (collapsible, open by default — this is the credibility proof) -->
     <details class="section-collapse" open>
+        <summary style="color:#58a6ff;">
+            <span class="s-arrow">▶</span> Recent Predictions vs Actuals
+        </summary>
+        <div class="section-body">
+            <div id="track-summary" class="track-summary"></div>
+            <div id="track-record-list"></div>
+        </div>
+    </details>
+
+    <!-- NEWS (collapsible) -->
+    <details class="section-collapse">
         <summary style="color:#58a6ff;">
             <span class="s-arrow">▶</span> Latest Headlines
         </summary>
@@ -367,7 +398,7 @@
 
     <!-- FOOTNOTES -->
     <div class="footnotes">
-        <p><strong>Directional Accuracy</strong> — walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon.</p>
+        <p><strong>Directional Accuracy</strong> — walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon. The "Recent Predictions vs Actuals" panel above shows the last 25 of those backtested predictions with their realized outcomes — so you can verify, not just trust, the headline number.</p>
         <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only — Linear Regression is excluded from conviction scoring because it is too simple to reliably capture price dynamics. Weak conviction is forced near earnings or Fed meetings regardless of accuracy.</p>
         <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment — display only, not trained into the model). <strong>VIX &gt; 20</strong> = elevated volatility / inflated options premiums.</p>
         <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders — not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
@@ -628,6 +659,10 @@ async function getPrediction() {
     document.getElementById('context-display').innerHTML   = '';
     document.getElementById('tech-display').innerHTML      = '';
     document.getElementById('warning-display').innerHTML   = '';
+    document.getElementById('track-summary').innerHTML     = '';
+    document.getElementById('track-record-list').innerHTML = '';
+    document.getElementById('headlines-list').innerHTML    = '';
+    document.getElementById('sentiment-summary').innerHTML = '';
     renderDAGauge(null, null);
 
     startProgress();
@@ -740,6 +775,38 @@ async function getPrediction() {
         if (data.fomc_flag)     warnings.push('Near Fed meeting — expect elevated volatility regardless of signal');
         if (data.signal_note && !data.earnings_flag && !data.fomc_flag) warnings.push(data.signal_note);
         warnEl.innerHTML = warnings.map(w => `<div class="warning-item">⚠ ${w}</div>`).join('');
+
+        // ── Track Record (backtested predictions vs actuals) ──
+        const trackList    = document.getElementById('track-record-list');
+        const trackSummary = document.getElementById('track-summary');
+        if (data.prediction_history && data.prediction_history.length > 0) {
+            const shown = data.prediction_history.length;
+            const hits  = data.prediction_history.filter(h => h.correct).length;
+            const recentPct = ((hits / shown) * 100).toFixed(0);
+            const total = data.backtest_samples || shown;
+            trackSummary.innerHTML =
+                `<strong>${hits}/${shown} correct (${recentPct}%)</strong> on the last ${shown} backtested predictions · `
+              + `Full ${total}-sample DA shown in gauge above. `
+              + `Each prediction was made using <em>only</em> the data available before its date — no peeking.`;
+
+            trackList.innerHTML = data.prediction_history.map(h => {
+                const checkColor = h.correct ? '#3fb950' : '#f85149';
+                const checkIcon  = h.correct ? '✓' : '✗';
+                const predColor  = h.predicted_pct >= 0 ? '#3fb950' : '#f85149';
+                const actColor   = h.actual_pct    >= 0 ? '#3fb950' : '#f85149';
+                const predSign   = h.predicted_pct >= 0 ? '+' : '';
+                const actSign    = h.actual_pct    >= 0 ? '+' : '';
+                return `<div class="track-row">
+                    <span class="check" style="color:${checkColor};">${checkIcon}</span>
+                    <span class="date">${h.date}</span>
+                    <span><span style="color:#484f58;">Pred</span> <span class="num" style="color:${predColor};">${predSign}${h.predicted_pct}%</span></span>
+                    <span><span style="color:#484f58;">Actual</span> <span class="num" style="color:${actColor};">${actSign}${h.actual_pct}%</span></span>
+                </div>`;
+            }).join('');
+        } else {
+            trackSummary.innerHTML = 'Not enough history for backtested track record on this ticker/horizon.';
+            trackList.innerHTML = '';
+        }
 
         // ── Headlines ──
         const headlinesList   = document.getElementById('headlines-list');

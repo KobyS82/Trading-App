@@ -51,6 +51,7 @@ def walk_forward_directional_accuracy(train_data, features, target_col, model_na
                                       n_windows=3, test_size=80):
     correct = 0
     total = 0
+    history = []
     n = len(train_data)
     for i in range(n_windows):
         end_idx = n - i * test_size
@@ -65,9 +66,19 @@ def walk_forward_directional_accuracy(train_data, features, target_col, model_na
         actuals = test[target_col].values
         correct += int(((preds >= 0) == (actuals >= 0)).sum())
         total   += len(preds)
+        for j in range(len(preds)):
+            if pd.isna(actuals[j]):
+                continue
+            history.append({
+                "date":          test.index[j].strftime('%Y-%m-%d'),
+                "predicted_pct": round(float(preds[j]),   2),
+                "actual_pct":    round(float(actuals[j]), 2),
+                "correct":       bool((preds[j] >= 0) == (actuals[j] >= 0)),
+            })
     if total == 0:
-        return None, 0
-    return round(correct / total * 100, 1), total
+        return None, 0, []
+    history.sort(key=lambda x: x["date"], reverse=True)
+    return round(correct / total * 100, 1), total, history
 
 
 def get_consensus_directions(train_data, features, target_col, today_data,
@@ -237,7 +248,7 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     fit_score  = max(0, round(float(r_squared) * 100, 1))
 
     # --- WALK-FORWARD DIRECTIONAL ACCURACY ---
-    directional_accuracy, backtest_samples = walk_forward_directional_accuracy(
+    directional_accuracy, backtest_samples, prediction_history = walk_forward_directional_accuracy(
         train_data, features, 'Target_Future_Pct', model
     )
 
@@ -315,4 +326,6 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
         "vix_close": round(float(today_data['VIX_Close'].item()), 2) if pd.notna(today_data['VIX_Close'].item()) else None,
         "rsi":       round(float(today_data['RSI'].item()),       1) if pd.notna(today_data['RSI'].item())       else None,
         "macd":      round(float(today_data['MACD'].item()),      3) if pd.notna(today_data['MACD'].item())      else None,
+        # Track record (walk-forward backtested predictions, most recent first)
+        "prediction_history": prediction_history[:25],
     }
