@@ -2,14 +2,37 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import pandas as pd
+from datetime import date
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from lightgbm import LGBMRegressor
 from textblob import TextBlob
 
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Fed decision announcement dates (second day of each 2-day meeting)
+FOMC_DATES = [
+    date(2025, 3, 19), date(2025, 5, 7),  date(2025, 6, 18),
+    date(2025, 7, 30), date(2025, 9, 17), date(2025, 10, 29), date(2025, 12, 10),
+    date(2026, 1, 28), date(2026, 3, 18), date(2026, 5, 6),  date(2026, 6, 17),
+    date(2026, 7, 29), date(2026, 9, 16), date(2026, 10, 28), date(2026, 12, 9),
+]
+
+
+def is_near_fomc(days_window=3):
+    today = date.today()
+    return any(abs((f - today).days) <= days_window for f in FOMC_DATES)
+
 
 def build_model(name: str):
-    """Returns (estimator, display_name). Centralizes model config so backtest and live prediction stay in sync."""
     if name == "rf":
         return RandomForestRegressor(
             n_estimators=200, random_state=42, oob_score=True,
@@ -25,144 +48,168 @@ def build_model(name: str):
 
 
 def walk_forward_directional_accuracy(train_data, features, target_col, model_name,
-                                      n_windows=4, test_size=80):
-    """
-    Honest out-of-sample directional accuracy.
-    For each window: train on everything before, predict the next test_size days,
-    score whether the predicted sign matched the actual sign. Returns (accuracy, n_predictions).
-    """
+                                      n_windows=3, test_size=80):
     correct = 0
     total = 0
     n = len(train_data)
-
     for i in range(n_windows):
         end_idx = n - i * test_size
         start_idx = end_idx - test_size
-        if start_idx < 250:  # need a meaningful training history
+        if start_idx < 250:
             break
-
         train = train_data.iloc[:start_idx]
-        test = train_data.iloc[start_idx:end_idx]
-
+        test  = train_data.iloc[start_idx:end_idx]
         m, _ = build_model(model_name)
         m.fit(train[features], train[target_col])
-        preds = m.predict(test[features])
+        preds   = m.predict(test[features])
         actuals = test[target_col].values
-
-        # Sign agreement (treat 0 as "up" — rare in pct change data anyway)
         correct += int(((preds >= 0) == (actuals >= 0)).sum())
-        total += len(preds)
-
+        total   += len(preds)
     if total == 0:
         return None, 0
     return round(correct / total * 100, 1), total
 
-app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def get_consensus_directions(train_data, features, target_col, today_data,
+                              selected_model, selected_pred):
+    """Fit all 3 models (light settings for the non-selected ones) and return direction dict."""
+    results = {}
+    for name, label in [("linear", "Linear"), ("rf", "Random Forest"), ("lgb", "LightGBM")]:
+        if name == selected_model:
+            p = selected_pred
+        elif name == "rf":
+            m = RandomForestRegressor(n_estimators=60, random_state=42, max_depth=5)
+            m.fit(train_data[features], train_data[target_col])
+            p = m.predict(today_data[features]).item()
+        elif name == "lgb":
+            m = LGBMRegressor(n_estimators=100, learning_rate=0.05,
+                               random_state=42, n_jobs=1, verbose=-1)
+            m.fit(train_data[features], train_data[target_col])
+            p = m.predict(today_data[features]).item()
+        else:
+            m = LinearRegression()
+            m.fit(train_data[features], train_data[target_col])
+            p = m.predict(today_data[features]).item()
+        results[label] = "up" if p >= 0 else "down"
+    return results
+
 
 @app.get("/")
 def root():
     return {"status": "ok"}
 
+
 @app.get("/predict")
-def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY"):
-    print(f"API called: Running {model} engine for {symbol} over {horizon} day(s)...")
+def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
+    print(f"API called: {model} | {symbol} | {horizon}d")
 
-    # Download target symbol and VIX
+    # --- DATA DOWNLOAD ---
     stock = yf.download(symbol, period='max', progress=False, auto_adjust=True).tail(2500)
-    vix = yf.download('^VIX', period='max', progress=False, auto_adjust=True).tail(2500)
+    vix   = yf.download('^VIX', period='max', progress=False, auto_adjust=True).tail(2500)
 
-    # Clean up MultiIndex columns
     if isinstance(stock.columns, pd.MultiIndex):
         stock.columns = stock.columns.get_level_values(0)
     if isinstance(vix.columns, pd.MultiIndex):
         vix.columns = vix.columns.get_level_values(0)
 
-    stock['VIX_Close'] = vix['Close']
+    stock['VIX_Close']  = vix['Close']
     stock['VIX_Change'] = vix['Close'].pct_change() * 100
 
     # --- FEATURE ENGINEERING ---
-    stock['SMA_50'] = stock['Close'].rolling(window=50).mean()
-    stock['Today_Pct_Change'] = stock['Close'].pct_change() * 100
-    stock['Target_Future_Pct'] = stock['Close'].pct_change(periods=horizon).shift(-horizon) * 100
-    stock['Vol_Change'] = stock['Volume'].pct_change() * 100
-    stock['Daily_Range'] = (stock['High'] - stock['Low']) / stock['Close'] * 100
-    stock['SMA_200'] = stock['Close'].rolling(window=200).mean()
-    stock['Dist_From_200'] = (stock['Close'] - stock['SMA_200']) / stock['SMA_200'] * 100
+    stock['SMA_50']          = stock['Close'].rolling(50).mean()
+    stock['Today_Pct_Change']= stock['Close'].pct_change() * 100
+    stock['Target_Future_Pct']= stock['Close'].pct_change(periods=horizon).shift(-horizon) * 100
+    stock['Vol_Change']      = stock['Volume'].pct_change() * 100
+    stock['Daily_Range']     = (stock['High'] - stock['Low']) / stock['Close'] * 100
+    stock['SMA_200']         = stock['Close'].rolling(200).mean()
+    stock['Dist_From_200']   = (stock['Close'] - stock['SMA_200']) / stock['SMA_200'] * 100
 
     delta = stock['Close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    stock['RSI'] = 100 - (100 / (1 + rs))
+    gain  = delta.where(delta > 0, 0).rolling(14).mean()
+    loss  = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    stock['RSI'] = 100 - (100 / (1 + gain / loss))
 
     ema_12 = stock['Close'].ewm(span=12, adjust=False).mean()
     ema_26 = stock['Close'].ewm(span=26, adjust=False).mean()
     stock['MACD'] = ema_12 - ema_26
 
-    stock['BB_Middle'] = stock['Close'].rolling(window=20).mean()
-    stock['BB_Std'] = stock['Close'].rolling(window=20).std()
-    stock['BB_Upper'] = stock['BB_Middle'] + (stock['BB_Std'] * 2)
-    stock['Dist_BB_Upper'] = (stock['Close'] - stock['BB_Upper']) / stock['BB_Upper'] * 100
+    bb_mid = stock['Close'].rolling(20).mean()
+    bb_std = stock['Close'].rolling(20).std()
+    bb_upper = bb_mid + bb_std * 2
+    stock['Dist_BB_Upper'] = (stock['Close'] - bb_upper) / bb_upper * 100
 
     stock['Day_Of_Week'] = stock.index.dayofweek
-    stock['Lag_1'] = stock['Today_Pct_Change'].shift(1)
-    stock['Lag_2'] = stock['Today_Pct_Change'].shift(2)
-    stock['Prev_Close'] = stock['Close'].shift(1)
-    stock['Gap_Pct'] = (stock['Open'] - stock['Prev_Close']) / stock['Prev_Close'] * 100
+    stock['Lag_1']       = stock['Today_Pct_Change'].shift(1)
+    stock['Lag_2']       = stock['Today_Pct_Change'].shift(2)
+    prev_close           = stock['Close'].shift(1)
+    stock['Gap_Pct']     = (stock['Open'] - prev_close) / prev_close * 100
+
+    # Multi-timeframe momentum
+    stock['Ret_5d']  = stock['Close'].pct_change(5)  * 100
+    stock['Ret_10d'] = stock['Close'].pct_change(10) * 100
+    stock['Ret_20d'] = stock['Close'].pct_change(20) * 100
+
+    # --- EARNINGS PROXIMITY FLAG (historical) ---
+    stock['Earnings_Flag'] = 0
+    ticker_obj = yf.Ticker(symbol)
+    try:
+        edates = ticker_obj.earnings_dates
+        if edates is not None and not edates.empty:
+            # Normalize both sides to tz-naive date for comparison
+            idx = stock.index
+            idx_naive = idx.tz_localize(None) if idx.tz is not None else idx
+            for edate in edates.index:
+                e = pd.Timestamp(edate).tz_localize(None) if pd.Timestamp(edate).tz is not None else pd.Timestamp(edate)
+                mask = (idx_naive >= e - pd.Timedelta(days=5)) & (idx_naive <= e + pd.Timedelta(days=2))
+                stock.loc[mask, 'Earnings_Flag'] = 1
+    except Exception as ex:
+        print(f"Earnings flag failed: {ex}")
 
     # --- NEWS + SENTIMENT ---
-    headlines = []
-    news_sentiment = 0.0  # default neutral if fetch fails
-
+    headlines      = []
+    news_sentiment = 0.0
     try:
-        ticker_obj = yf.Ticker(symbol)
-        news_items = ticker_obj.news[:5]  # grab top 5 articles
-
-        scores = []
-        for item in news_items:
-            # yfinance news structure: item['content']['title']
+        for item in ticker_obj.news[:5]:
             title = ""
             if isinstance(item.get('content'), dict):
                 title = item['content'].get('title', '')
             elif isinstance(item.get('title'), str):
                 title = item['title']
-
             if title:
-                sentiment = TextBlob(title).sentiment.polarity  # -1 to +1
-                scores.append(sentiment)
+                sentiment = TextBlob(title).sentiment.polarity
                 link = ""
                 if isinstance(item.get('content'), dict):
-                    # nested content structure
                     canonical = item['content'].get('canonicalUrl', {})
                     link = canonical.get('url', '') if isinstance(canonical, dict) else ''
                 elif isinstance(item.get('link'), str):
                     link = item['link']
+                headlines.append({"title": title, "sentiment": round(sentiment, 3), "url": link})
+        if headlines:
+            news_sentiment = round(sum(h['sentiment'] for h in headlines) / len(headlines), 4)
+    except Exception as ex:
+        print(f"News fetch failed: {ex}")
 
-                headlines.append({
-                    "title": title,
-                    "sentiment": round(sentiment, 3),
-                    "url": link
-                })
+    # --- PUT/CALL RATIO (nearest expiry, display only) ---
+    put_call_ratio = None
+    try:
+        opts = ticker_obj.options
+        if opts:
+            chain    = ticker_obj.option_chain(opts[0])
+            put_vol  = chain.puts['volume'].fillna(0).sum()
+            call_vol = chain.calls['volume'].fillna(0).sum()
+            if call_vol > 0:
+                put_call_ratio = round(float(put_vol / call_vol), 2)
+    except Exception as ex:
+        print(f"P/C ratio failed: {ex}")
 
-        if scores:
-            news_sentiment = round(sum(scores) / len(scores), 4)
+    # --- FOMC FLAG ---
+    fomc_flag = is_near_fomc(days_window=3)
 
-    except Exception as e:
-        print(f"News fetch failed: {e}")
-
-    # Inject sentiment as a static column (same value for all rows — today's news)
-    # This is a simplification; it only influences the today_data prediction
-    stock['News_Sentiment'] = 0.0  # neutral for all training rows
+    # --- INJECT TODAY OVERRIDES ---
+    stock['News_Sentiment'] = 0.0
     today_data = stock.tail(1).copy()
-    today_data['News_Sentiment'] = news_sentiment  # override with live score for prediction
+    today_data['News_Sentiment'] = news_sentiment
+    # Earnings flag already set correctly for today via the historical loop above
 
     train_data = stock.dropna().copy()
 
@@ -171,51 +218,92 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
         'Dist_From_200', 'MACD', 'Dist_BB_Upper', 'Day_Of_Week',
         'Lag_1', 'Lag_2', 'Gap_Pct',
         'VIX_Close', 'VIX_Change',
-        'News_Sentiment'
+        'Ret_5d', 'Ret_10d', 'Ret_20d',
+        'Earnings_Flag',
+        'News_Sentiment',
     ]
 
-    # --- ENGINE SWAP ---
+    # --- MAIN MODEL FIT ---
     ml_engine, model_name = build_model(model)
     ml_engine.fit(train_data[features], train_data['Target_Future_Pct'])
 
-    if model == "rf":
-        r_squared = ml_engine.oob_score_
-    else:
-        r_squared = ml_engine.score(train_data[features], train_data['Target_Future_Pct'])
+    r_squared = (ml_engine.oob_score_
+                 if model == "rf"
+                 else ml_engine.score(train_data[features], train_data['Target_Future_Pct']))
 
     prediction = ml_engine.predict(today_data[features])
-    pred_val = prediction.item()
-    price_val = today_data['Close'].item()
+    pred_val   = prediction.item()
+    price_val  = today_data['Close'].item()
+    fit_score  = max(0, round(float(r_squared) * 100, 1))
 
-    fit_score = max(0, round(float(r_squared) * 100, 1))
-
-    # --- WALK-FORWARD DIRECTIONAL ACCURACY (the real confidence) ---
+    # --- WALK-FORWARD DIRECTIONAL ACCURACY ---
     directional_accuracy, backtest_samples = walk_forward_directional_accuracy(
         train_data, features, 'Target_Future_Pct', model
     )
 
-    # --- INFO PANEL DATA ---
-    training_start = train_data.index[0].strftime('%Y-%m-%d')
-    training_end = train_data.index[-1].strftime('%Y-%m-%d')
+    # --- MODEL CONSENSUS ---
+    consensus_results = get_consensus_directions(
+        train_data, features, 'Target_Future_Pct', today_data, model, pred_val
+    )
+    primary_dir    = "up" if pred_val >= 0 else "down"
+    models_agreeing = sum(1 for d in consensus_results.values() if d == primary_dir)
+
+    # --- SIGNAL + CONVICTION ---
+    today_earnings = int(today_data['Earnings_Flag'].item())
+
+    if abs(pred_val) < 0.05:
+        signal = "HOLD"
+    elif pred_val > 0:
+        signal = "BUY"
+    else:
+        signal = "SELL"
+
+    signal_note = None
+    if today_earnings or fomc_flag:
+        conviction  = "Weak"
+        signal_note = "Near earnings or Fed meeting — elevated uncertainty"
+    elif directional_accuracy and directional_accuracy >= 55 and models_agreeing == 3:
+        conviction = "Strong"
+    elif directional_accuracy and directional_accuracy >= 52 and models_agreeing >= 2:
+        conviction = "Moderate"
+    else:
+        conviction  = "Weak"
+        signal_note = "Low model agreement or sub-52% historical accuracy on this ticker/horizon"
+
+    # --- INFO PANEL ---
+    training_start    = train_data.index[0].strftime('%Y-%m-%d')
+    training_end      = train_data.index[-1].strftime('%Y-%m-%d')
     num_training_rows = len(train_data)
-    oob_note = round(float(ml_engine.oob_score_) * 100, 1) if model == "rf" else None
+    oob_note          = round(float(ml_engine.oob_score_) * 100, 1) if model == "rf" else None
 
     return {
-        "symbol": symbol.upper(),
+        "symbol":               symbol.upper(),
+        "current_price":        round(float(price_val), 2),
         "predicted_change_pct": round(float(pred_val), 3),
-        "current_price": round(float(price_val), 2),
-        "confidence": directional_accuracy if directional_accuracy is not None else fit_score,
+        "horizon_days":         horizon,
+        # Signal
+        "signal":               signal,
+        "conviction":           conviction,
+        "signal_note":          signal_note,
+        # Consensus
+        "consensus_results":    consensus_results,
+        "models_agreeing":      models_agreeing,
+        # Context flags
+        "earnings_flag":        bool(today_earnings),
+        "fomc_flag":            fomc_flag,
+        "put_call_ratio":       put_call_ratio,
+        # Accuracy
         "directional_accuracy": directional_accuracy,
-        "backtest_samples": backtest_samples,
-        "fit_score": fit_score,
-        "model_used": model_name,
-        "horizon_days": horizon,
-        # Info panel fields
-        "training_rows": num_training_rows,
-        "training_start": training_start,
-        "training_end": training_end,
-        "oob_score": oob_note,
-        "features_used": len(features),
-        "news_sentiment": news_sentiment,
-        "headlines": headlines
+        "backtest_samples":     backtest_samples,
+        "confidence":           directional_accuracy if directional_accuracy is not None else fit_score,
+        "fit_score":            fit_score,
+        "model_used":           model_name,
+        # Info panel
+        "training_rows":        num_training_rows,
+        "training_start":       training_start,
+        "training_end":         training_end,
+        "oob_score":            oob_note,
+        "features_used":        len(features),
+        "news_sentiment":       news_sentiment,
+        "headlines":            headlines,
     }

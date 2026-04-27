@@ -156,6 +156,33 @@
             padding-top: 1rem;
         }
         .footnotes p { margin: 0.25rem 0; }
+
+        /* Signal & conviction badges */
+        .signal-badge {
+            font-size: 1.5rem;
+            font-weight: bold;
+            padding: 0.35rem 1.1rem;
+            border-radius: 6px;
+            display: inline-block;
+            letter-spacing: 0.04em;
+        }
+        .conviction-badge {
+            font-size: 0.78rem;
+            font-weight: bold;
+            padding: 0.25rem 0.65rem;
+            border-radius: 4px;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .warning-item {
+            background: rgba(210, 153, 34, 0.1);
+            border: 1px solid rgba(210, 153, 34, 0.3);
+            border-radius: 4px;
+            padding: 0.3rem 0.6rem;
+            margin: 0.25rem 0;
+            color: #d29922;
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
@@ -185,7 +212,23 @@
             <span id="prediction-text">Predicting movement...</span>
         </div>
 
-        <div id="conf-val" style="margin-top:0.5rem; font-size:0.9rem; color:#8b949e;"></div>
+        <!-- Signal -->
+        <div id="signal-section" style="margin: 1rem 0; display:flex; align-items:center; justify-content:center; gap:0.5rem; flex-wrap:wrap;">
+            <span id="signal-badge" class="signal-badge"></span>
+            <span id="conviction-badge" class="conviction-badge"></span>
+        </div>
+
+        <!-- Model consensus -->
+        <div id="consensus-display" style="font-size:0.8rem; color:#8b949e; margin-bottom:0.5rem;"></div>
+
+        <!-- Directional accuracy -->
+        <div id="conf-val" style="font-size:0.9rem; color:#8b949e;"></div>
+
+        <!-- P/C ratio & context flags -->
+        <div id="context-display" style="margin-top:0.5rem; font-size:0.85rem; color:#8b949e;"></div>
+
+        <!-- Warnings -->
+        <div id="warning-display" style="margin-top:0.5rem; text-align:left;"></div>
 
         <!-- News headlines -->
         <div id="news-section" style="margin-top: 1.5rem; text-align: left;">
@@ -208,9 +251,9 @@
 
         <!-- Footer notes -->
         <div class="footnotes">
-            <p><strong>Directional Accuracy</strong> is computed via <em>walk-forward backtesting</em>: the model is retrained on past-only data and tested on the next ~80 days, repeated across 4 windows. The % shown is how often it correctly called UP vs. DOWN on data it never saw during training.</p>
+            <p><strong>Directional Accuracy</strong> is computed via <em>walk-forward backtesting</em>: the model trains on past-only data, predicts the next ~80 days, and scores UP/DOWN correctness — repeated 3 times across different periods. The % shown is how often it was right on data it never saw.</p>
             <p>🎯 <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip on this ticker/horizon.</p>
-            <p>The old in-sample fit score (R²/OOB) is now in the Calculation Details panel — useful for diagnostics but <strong>not</strong> a measure of real-world trading performance.</p>
+            <p><strong>Signal conviction</strong> is Weak near earnings or Fed meetings regardless of accuracy — those events introduce regime uncertainty that technical features cannot capture. P/C Ratio reflects options market positioning for the nearest expiry (display only — not in the model due to limited historical data).</p>
         </div>
     </div>
 
@@ -387,6 +430,42 @@
                     predEl.className = "prediction down";
                 }
 
+                // Signal badge
+                const sigBadge  = document.getElementById('signal-badge');
+                const convBadge = document.getElementById('conviction-badge');
+                const sigColor  = data.signal === 'BUY'  ? '#3fb950'
+                                : data.signal === 'SELL' ? '#f85149' : '#8b949e';
+                const sigBg     = data.signal === 'BUY'  ? 'rgba(63,185,80,0.12)'
+                                : data.signal === 'SELL' ? 'rgba(248,81,73,0.12)' : 'rgba(139,148,158,0.12)';
+                const sigArrow  = data.signal === 'BUY' ? '▲ ' : data.signal === 'SELL' ? '▼ ' : '● ';
+                sigBadge.textContent = sigArrow + data.signal;
+                sigBadge.style.color      = sigColor;
+                sigBadge.style.background = sigBg;
+                sigBadge.style.border     = `1px solid ${sigColor}`;
+
+                const convColor = data.conviction === 'Strong'   ? '#3fb950'
+                                : data.conviction === 'Moderate' ? '#d29922' : '#8b949e';
+                convBadge.textContent     = data.conviction + ' Conviction';
+                convBadge.style.color     = convColor;
+                convBadge.style.background= convColor + '22';
+                convBadge.style.border    = `1px solid ${convColor}55`;
+
+                // Model consensus
+                const consensusEl = document.getElementById('consensus-display');
+                if (data.consensus_results) {
+                    const primaryDir = data.predicted_change_pct >= 0 ? 'up' : 'down';
+                    let html = 'Models: ';
+                    for (const [label, dir] of Object.entries(data.consensus_results)) {
+                        const c = dir === 'up' ? '#3fb950' : '#f85149';
+                        const a = dir === 'up' ? '▲' : '▼';
+                        html += `<span style="color:${c}; margin:0 0.4rem;" title="${label}">${a} ${label}</span>`;
+                    }
+                    consensusEl.innerHTML = html;
+                } else {
+                    consensusEl.innerHTML = '';
+                }
+
+                // Directional accuracy
                 const confEl = document.getElementById('conf-val');
                 if (data.directional_accuracy !== null && data.directional_accuracy !== undefined) {
                     const da = data.directional_accuracy;
@@ -396,6 +475,27 @@
                 } else {
                     confEl.innerText = "Confidence: " + data.confidence + "%";
                 }
+
+                // P/C ratio + context
+                const ctxEl = document.getElementById('context-display');
+                let ctxParts = [];
+                if (data.put_call_ratio !== null && data.put_call_ratio !== undefined) {
+                    const pc = data.put_call_ratio;
+                    const pcColor = pc < 0.8 ? '#3fb950' : pc > 1.2 ? '#f85149' : '#8b949e';
+                    const pcLabel = pc < 0.7 ? 'Very Bullish' : pc < 0.9 ? 'Bullish'
+                                  : pc > 1.4 ? 'Very Bearish' : pc > 1.1 ? 'Bearish' : 'Neutral';
+                    ctxParts.push(`P/C Ratio: <span style="color:${pcColor}; font-weight:bold;">${pc}</span> <span style="color:#484f58;">${pcLabel}</span>`);
+                }
+                ctxEl.innerHTML = ctxParts.join(' &nbsp;·&nbsp; ');
+
+                // Warnings
+                const warnEl = document.getElementById('warning-display');
+                const warnings = [];
+                if (data.earnings_flag) warnings.push('Near earnings date — model reliability reduced');
+                if (data.fomc_flag)     warnings.push('Near Fed meeting — expect elevated volatility');
+                if (data.signal_note && !data.earnings_flag && !data.fomc_flag)
+                    warnings.push(data.signal_note);
+                warnEl.innerHTML = warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
 
                 // Render headlines
                 const headlinesList = document.getElementById('headlines-list');
