@@ -247,6 +247,11 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     )
     primary_dir    = "up" if pred_val >= 0 else "down"
     models_agreeing = sum(1 for d in consensus_results.values() if d == primary_dir)
+    # Conviction uses only the two ML models (Linear is too simple for noisy price data)
+    ml_agreeing = sum(
+        1 for label, d in consensus_results.items()
+        if label in ("Random Forest", "LightGBM") and d == primary_dir
+    )
 
     # --- SIGNAL + CONVICTION ---
     today_earnings = int(today_data['Earnings_Flag'].item())
@@ -262,9 +267,9 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     if today_earnings or fomc_flag:
         conviction  = "Weak"
         signal_note = "Near earnings or Fed meeting — elevated uncertainty"
-    elif directional_accuracy and directional_accuracy >= 55 and models_agreeing == 3:
+    elif directional_accuracy and directional_accuracy >= 55 and ml_agreeing == 2:
         conviction = "Strong"
-    elif directional_accuracy and directional_accuracy >= 52 and models_agreeing >= 2:
+    elif directional_accuracy and directional_accuracy >= 52 and ml_agreeing >= 1:
         conviction = "Moderate"
     else:
         conviction  = "Weak"
@@ -306,4 +311,8 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
         "features_used":        len(features),
         "news_sentiment":       news_sentiment,
         "headlines":            headlines,
+        # Market context (for UI display)
+        "vix_close": round(float(today_data['VIX_Close'].item()), 2) if pd.notna(today_data['VIX_Close'].item()) else None,
+        "rsi":       round(float(today_data['RSI'].item()),       1) if pd.notna(today_data['RSI'].item())       else None,
+        "macd":      round(float(today_data['MACD'].item()),      3) if pd.notna(today_data['MACD'].item())      else None,
     }

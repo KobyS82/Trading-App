@@ -3,559 +3,795 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SPY Predictor Pro</title>
+    <title>Market Edge — ML Trading Signals</title>
     <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            background-color: #0d1117;
+            background: #0d1117;
             color: #c9d1d9;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
             display: flex;
             justify-content: center;
             align-items: flex-start;
             min-height: 100vh;
-            margin: 0;
-            padding: 2rem 1rem;
-            box-sizing: border-box;
+            padding: 1.5rem 1rem;
         }
+
         .card {
-            background-color: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 2rem;
-            width: 400px;
-            text-align: center;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-        }
-        h1 { margin-top: 0; font-size: 1.5rem; color: #58a6ff; }
-        .price { font-size: 2.5rem; font-weight: bold; margin: 1rem 0; }
-        .prediction {
-            font-size: 1.2rem;
-            padding: 0.5rem;
-            border-radius: 4px;
-            display: inline-block;
-        }
-        .up { color: #3fb950; background: rgba(63, 185, 80, 0.1); }
-        .down { color: #f85149; background: rgba(248, 81, 73, 0.1); }
-
-        /* Symbol input row */
-        .symbol-row {
-            display: flex;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
-        .symbol-row input {
-            flex: 1;
-            padding: 0.5rem;
-            background: #0d1117;
-            color: white;
-            border: 1px solid #30363d;
-            border-radius: 4px;
-            font-weight: bold;
-            font-size: 1rem;
-            text-transform: uppercase;
-        }
-        .symbol-row button {
-            margin: 0;
-            padding: 0.5rem 1rem;
-        }
-
-        /* Ticker autocomplete */
-        .ticker-wrapper { flex: 1; position: relative; }
-        .ticker-wrapper input { flex: none; width: 100%; margin-bottom: 0; }
-        .ticker-dropdown {
-            position: absolute;
-            top: 100%;
-            left: 0;
-            right: 0;
             background: #161b22;
             border: 1px solid #30363d;
-            border-radius: 4px;
-            margin-top: 2px;
-            max-height: 200px;
-            overflow-y: auto;
-            z-index: 100;
-            list-style: none;
-            padding: 0;
-            display: none;
+            border-radius: 12px;
+            padding: 1.75rem;
+            width: 100%;
+            max-width: 520px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+        }
+
+        /* ── HEADER ── */
+        .card-header { text-align: center; margin-bottom: 1.25rem; }
+        h1 { font-size: 1.5rem; color: #58a6ff; margin-bottom: 0.15rem; }
+        .ticker-desc { font-size: 0.78rem; color: #8b949e; min-height: 1rem; }
+        .last-updated { font-size: 0.7rem; color: #484f58; margin-top: 0.2rem; min-height: 0.9rem; }
+
+        /* ── CONTROLS ── */
+        .controls { margin-bottom: 0.85rem; }
+        .symbol-row { display: flex; gap: 0.5rem; margin-bottom: 0.5rem; }
+        .ticker-wrapper { flex: 1; position: relative; }
+
+        select, .ticker-wrapper input {
+            background: #0d1117;
+            color: #c9d1d9;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 0.5rem 0.65rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            width: 100%;
+        }
+        select {
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238b949e'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.65rem center;
+            padding-right: 1.75rem;
+            cursor: pointer;
+        }
+        select:focus, .ticker-wrapper input:focus { outline: none; border-color: #58a6ff; }
+
+        .select-row { display: grid; grid-template-columns: 1.15fr 1fr; gap: 0.5rem; }
+
+        .go-btn {
+            background: #238636; color: white; border: none;
+            padding: 0.5rem 1.1rem; border-radius: 6px;
+            cursor: pointer; font-weight: 700; font-size: 0.9rem;
+            white-space: nowrap; flex-shrink: 0;
+        }
+        .go-btn:hover { background: #2ea043; }
+
+        /* ── TICKER AUTOCOMPLETE ── */
+        .ticker-dropdown {
+            position: absolute; top: calc(100% + 2px); left: 0; right: 0;
+            background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+            max-height: 200px; overflow-y: auto; z-index: 100;
+            list-style: none; display: none;
         }
         .ticker-dropdown li {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.4rem 0.65rem;
-            cursor: pointer;
-            font-size: 0.85rem;
-            gap: 0.5rem;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.4rem 0.65rem; cursor: pointer; font-size: 0.82rem; gap: 0.5rem;
         }
-        .ticker-dropdown li:hover,
-        .ticker-dropdown li.active { background: #21262d; }
+        .ticker-dropdown li:hover, .ticker-dropdown li.active { background: #21262d; }
 
-        select, input {
-            margin-bottom: 0.5rem;
-            padding: 0.5rem;
-            background: #0d1117;
-            color: white;
-            border: 1px solid #30363d;
-            border-radius: 4px;
-            width: 100%;
-            font-weight: bold;
-            box-sizing: border-box;
+        /* ── PROGRESS BAR ── */
+        .progress-container { margin: 0.4rem 0 0.7rem; }
+        .progress-track { height: 3px; background: #21262d; border-radius: 2px; overflow: hidden; }
+        .progress-fill {
+            height: 100%; width: 0%;
+            background: linear-gradient(90deg, #238636, #58a6ff);
+            border-radius: 2px; transition: width 0.85s ease;
         }
-        button {
-            background-color: #238636;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            margin-top: 1.5rem;
-            font-weight: bold;
-            width: 100%;
-        }
-        button:hover { background-color: #2ea043; }
+        .progress-label { font-size: 0.7rem; color: #8b949e; text-align: center; margin-top: 0.3rem; }
 
-        /* Info panel */
-        .info-panel {
-            margin-top: 1.5rem;
+        /* ── PRICE SECTION ── */
+        .price-section {
+            display: flex; align-items: center; justify-content: center;
+            gap: 1.5rem; margin: 0.75rem 0 0.3rem;
+        }
+        .price-col { text-align: center; }
+        .price-col-label {
+            font-size: 0.68rem; color: #8b949e; margin-bottom: 0.12rem;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        .price-now  { font-size: 2.1rem; font-weight: 700; color: #c9d1d9; }
+        .price-tgt  { font-size: 2.1rem; font-weight: 700; }
+        .price-arrow { font-size: 1.3rem; color: #484f58; flex-shrink: 0; }
+
+        /* ── PREDICTION TEXT ── */
+        .prediction {
+            font-size: 1.1rem; padding: 0.35rem 0.9rem; border-radius: 6px;
+            display: inline-block; font-weight: 600;
+        }
+        .up   { color: #3fb950; background: rgba(63,185,80,0.1); }
+        .down { color: #f85149; background: rgba(248,81,73,0.1); }
+        .flat { color: #8b949e; background: rgba(139,148,158,0.1); }
+
+        /* ── SIGNAL ── */
+        .signal-row {
+            display: flex; align-items: center; justify-content: center;
+            gap: 0.6rem; margin: 0.75rem 0; flex-wrap: wrap;
+        }
+        .signal-badge {
+            font-size: 1.5rem; font-weight: 700;
+            padding: 0.3rem 1.1rem; border-radius: 6px;
+            letter-spacing: 0.05em;
+        }
+        .conviction-badge {
+            font-size: 0.78rem; font-weight: 700;
+            padding: 0.25rem 0.65rem; border-radius: 4px;
+        }
+
+        /* ── CONSENSUS ── */
+        .consensus-display { font-size: 0.8rem; color: #8b949e; margin: 0.2rem 0; text-align: center; }
+
+        /* ── DA GAUGE ── */
+        .da-section { margin: 0.85rem 0; }
+        .da-header {
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 0.82rem; margin-bottom: 0.45rem;
+        }
+        .da-label { color: #8b949e; }
+        .da-wrap { position: relative; }
+        .da-track { height: 10px; background: #21262d; border-radius: 5px; position: relative; overflow: hidden; }
+        .da-fill { height: 100%; width: 0%; border-radius: 5px; transition: width 0.7s ease; position: relative; z-index: 1; }
+        .da-tick-line {
+            position: absolute; top: 0; width: 2px; height: 100%;
+            background: #0d1117; z-index: 2; transform: translateX(-50%);
+        }
+        .da-tick-wrap { position: relative; height: 16px; }
+        .da-tick-lbl {
+            position: absolute; top: 2px; font-size: 0.6rem; color: #484f58;
+            transform: translateX(-50%);
+        }
+        .da-samples { font-size: 0.7rem; color: #484f58; text-align: right; margin-top: 0.2rem; }
+
+        /* ── CONTEXT ROW ── */
+        .context-row {
+            display: flex; gap: 1rem; justify-content: center; align-items: center;
+            font-size: 0.82rem; margin: 0.5rem 0; flex-wrap: wrap;
+        }
+
+        /* ── TECH ROW (RSI / MACD) ── */
+        .tech-row {
+            display: flex; gap: 1.25rem; justify-content: center;
+            font-size: 0.8rem; color: #8b949e; margin: 0.25rem 0;
+        }
+
+        /* ── WARNINGS ── */
+        .warnings { margin: 0.4rem 0; }
+        .warning-item {
+            background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3);
+            border-radius: 4px; padding: 0.3rem 0.65rem; margin: 0.2rem 0;
+            color: #d29922; font-size: 0.79rem; line-height: 1.4;
+        }
+
+        /* ── DIVIDER ── */
+        .divider { height: 1px; background: #21262d; margin: 0.9rem 0; }
+
+        /* ── ACTION ROW ── */
+        .action-row {
+            display: flex; gap: 0.5rem; align-items: center; margin: 0.85rem 0 0;
+        }
+        .btn-primary {
+            flex: 1; background: #238636; color: white; border: none;
+            padding: 0.6rem; border-radius: 6px; cursor: pointer;
+            font-weight: 700; font-size: 0.9rem;
+        }
+        .btn-primary:hover { background: #2ea043; }
+        .btn-secondary {
+            background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+            padding: 0.6rem 0.9rem; border-radius: 6px; cursor: pointer;
+            font-size: 0.8rem; white-space: nowrap; font-weight: 600;
+        }
+        .btn-secondary:hover { background: #30363d; }
+        .btn-secondary.active { background: rgba(35,134,54,0.2); border-color: #238636; color: #3fb950; }
+        .countdown { font-size: 0.72rem; color: #484f58; white-space: nowrap; min-width: 2.5rem; }
+
+        /* ── COLLAPSIBLE SECTIONS ── */
+        .section-collapse {
+            border: 1px solid #21262d; border-radius: 6px; overflow: hidden;
+            margin: 0.5rem 0;
+        }
+        .section-collapse summary {
+            padding: 0.6rem 0.85rem; cursor: pointer; font-size: 0.82rem;
+            font-weight: 700; list-style: none;
+            display: flex; align-items: center; gap: 0.4rem; user-select: none;
             background: #0d1117;
-            border: 1px solid #30363d;
-            border-radius: 6px;
-            padding: 0.75rem 1rem;
-            text-align: left;
-            font-size: 0.82rem;
-            color: #8b949e;
         }
-        .info-panel summary {
-            cursor: pointer;
-            color: #58a6ff;
-            font-weight: bold;
-            font-size: 0.85rem;
-            list-style: none;
+        .section-collapse summary::-webkit-details-marker { display: none; }
+        .s-arrow { font-size: 0.65rem; color: #484f58; transition: transform 0.2s; display: inline-block; }
+        .section-collapse[open] .s-arrow { transform: rotate(90deg); }
+        .section-body { padding: 0.5rem 0.85rem 0.75rem; background: #0d1117; }
+
+        /* ── NEWS ── */
+        .news-headline {
+            font-size: 0.78rem; padding: 0.3rem 0;
+            border-bottom: 1px solid #21262d; line-height: 1.4;
         }
-        .info-panel summary::-webkit-details-marker { display: none; }
-        .info-panel summary::before { content: "▶ "; font-size: 0.7rem; }
-        details[open] summary::before { content: "▼ "; }
+        .news-headline:last-child { border-bottom: none; }
+        .sentiment-summary { font-size: 0.78rem; color: #8b949e; margin-top: 0.4rem; }
+
+        /* ── INFO PANEL ── */
         .info-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.25rem 0;
-            border-bottom: 1px solid #21262d;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0.22rem 0; border-bottom: 1px solid #21262d; font-size: 0.8rem;
         }
         .info-row:last-child { border-bottom: none; }
         .info-label { color: #8b949e; }
-        .info-value { color: #c9d1d9; font-weight: bold; }
+        .info-value { color: #c9d1d9; font-weight: 700; }
 
-        /* Footer notes */
+        /* ── FOOTNOTES ── */
         .footnotes {
-            margin-top: 1.5rem;
-            font-size: 0.75rem;
-            color: #484f58;
-            text-align: left;
-            line-height: 1.5;
-            border-top: 1px solid #21262d;
-            padding-top: 1rem;
+            margin-top: 1rem; font-size: 0.72rem; color: #484f58; line-height: 1.5;
+            border-top: 1px solid #21262d; padding-top: 0.75rem;
         }
-        .footnotes p { margin: 0.25rem 0; }
+        .footnotes p { margin: 0.2rem 0; }
 
-        /* Signal & conviction badges */
-        .signal-badge {
-            font-size: 1.5rem;
-            font-weight: bold;
-            padding: 0.35rem 1.1rem;
-            border-radius: 6px;
-            display: inline-block;
-            letter-spacing: 0.04em;
-        }
-        .conviction-badge {
-            font-size: 0.78rem;
-            font-weight: bold;
-            padding: 0.25rem 0.65rem;
-            border-radius: 4px;
-            display: inline-block;
-            vertical-align: middle;
-        }
-        .warning-item {
-            background: rgba(210, 153, 34, 0.1);
-            border: 1px solid rgba(210, 153, 34, 0.3);
-            border-radius: 4px;
-            padding: 0.3rem 0.6rem;
-            margin: 0.25rem 0;
-            color: #d29922;
-            font-size: 0.8rem;
+        /* ── MOBILE ── */
+        @media (max-width: 480px) {
+            body { padding: 0; }
+            .card { border-radius: 0; min-height: 100vh; border: none; }
+            .select-row { grid-template-columns: 1fr; }
+            .price-now, .price-tgt { font-size: 1.75rem; }
+            .price-section { gap: 1rem; }
         }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1 id="symbol">Loading...</h1>
+<div class="card">
 
-        <!-- Symbol input -->
+    <!-- HEADER -->
+    <div class="card-header">
+        <h1 id="symbol-title">Market Edge</h1>
+        <div id="ticker-desc" class="ticker-desc"></div>
+        <div id="last-updated" class="last-updated"></div>
+    </div>
+
+    <!-- CONTROLS -->
+    <div class="controls">
         <div class="symbol-row">
             <div class="ticker-wrapper">
-                <input type="text" id="symbol-input" value="SPY" maxlength="5" placeholder="Ticker" autocomplete="off" />
+                <input type="text" id="symbol-input" value="SPY" maxlength="5"
+                       placeholder="Ticker" autocomplete="off" inputmode="text" />
                 <ul id="ticker-dropdown" class="ticker-dropdown"></ul>
             </div>
-            <button onclick="getPrediction()" style="width:auto; margin-top:0;">Go</button>
+            <button class="go-btn" onclick="getPrediction()">Go</button>
         </div>
-
-        <select id="model-select" onchange="getPrediction()">
-            <option value="linear">Model: Linear Regression (Calc 3)</option>
-            <option value="rf">Model: Random Forest (Advanced)</option>
-            <option value="lgb" selected>Model: LightGBM (Best)</option>
-        </select>
-
-        <select id="horizon-select" onchange="getPrediction()"></select>
-
-        <div class="price" id="price">--</div>
-
-        <div id="prediction-container">
-            <span id="prediction-text">Predicting movement...</span>
-        </div>
-
-        <!-- Signal -->
-        <div id="signal-section" style="margin: 1rem 0; display:flex; align-items:center; justify-content:center; gap:0.5rem; flex-wrap:wrap;">
-            <span id="signal-badge" class="signal-badge"></span>
-            <span id="conviction-badge" class="conviction-badge"></span>
-        </div>
-
-        <!-- Model consensus -->
-        <div id="consensus-display" style="font-size:0.8rem; color:#8b949e; margin-bottom:0.5rem;"></div>
-
-        <!-- Directional accuracy -->
-        <div id="conf-val" style="font-size:0.9rem; color:#8b949e;"></div>
-
-        <!-- P/C ratio & context flags -->
-        <div id="context-display" style="margin-top:0.5rem; font-size:0.85rem; color:#8b949e;"></div>
-
-        <!-- Warnings -->
-        <div id="warning-display" style="margin-top:0.5rem; text-align:left;"></div>
-
-        <!-- News headlines -->
-        <div id="news-section" style="margin-top: 1.5rem; text-align: left;">
-            <div style="font-size:0.8rem; color:#58a6ff; font-weight:bold; margin-bottom:0.5rem;">
-                📰 Latest Headlines
-            </div>
-            <div id="headlines-list"></div>
-            <div id="sentiment-summary" style="font-size:0.8rem; color:#8b949e; margin-top:0.5rem;"></div>
-        </div>
-
-        <!-- Collapsible info panel -->
-        <div class="info-panel">
-            <details>
-                <summary>Calculation Details</summary>
-                <div id="info-rows" style="margin-top: 0.5rem;"></div>
-            </details>
-        </div>
-
-        <button onclick="getPrediction()">Refresh Prediction</button>
-
-        <!-- Footer notes -->
-        <div class="footnotes">
-            <p><strong>Directional Accuracy</strong> is computed via <em>walk-forward backtesting</em>: the model trains on past-only data, predicts the next ~80 days, and scores UP/DOWN correctness — repeated 3 times across different periods. The % shown is how often it was right on data it never saw.</p>
-            <p>🎯 <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip on this ticker/horizon.</p>
-            <p><strong>Signal conviction</strong> is Weak near earnings or Fed meetings regardless of accuracy — those events introduce regime uncertainty that technical features cannot capture. P/C Ratio reflects options market positioning for the nearest expiry (display only — not in the model due to limited historical data).</p>
+        <div class="select-row">
+            <select id="model-select" onchange="getPrediction()">
+                <option value="linear">Linear Regression</option>
+                <option value="rf">Random Forest</option>
+                <option value="lgb" selected>LightGBM (Best)</option>
+            </select>
+            <select id="horizon-select" onchange="getPrediction()"></select>
         </div>
     </div>
 
-    <script>
-        const POPULAR_TICKERS = [
-            { symbol: 'SPY',  name: 'S&P 500 ETF' },
-            { symbol: 'QQQ',  name: 'Nasdaq 100 ETF' },
-            { symbol: 'IWM',  name: 'Russell 2000 ETF' },
-            { symbol: 'DIA',  name: 'Dow Jones ETF' },
-            { symbol: 'GLD',  name: 'Gold ETF' },
-            { symbol: 'TLT',  name: '20yr Treasury ETF' },
-            { symbol: 'VXX',  name: 'VIX Futures ETF' },
-            { symbol: 'AAPL', name: 'Apple' },
-            { symbol: 'MSFT', name: 'Microsoft' },
-            { symbol: 'NVDA', name: 'NVIDIA' },
-            { symbol: 'GOOGL',name: 'Alphabet' },
-            { symbol: 'AMZN', name: 'Amazon' },
-            { symbol: 'META', name: 'Meta' },
-            { symbol: 'TSLA', name: 'Tesla' },
-            { symbol: 'AMD',  name: 'AMD' },
-            { symbol: 'NFLX', name: 'Netflix' },
-            { symbol: 'AVGO', name: 'Broadcom' },
-            { symbol: 'JPM',  name: 'JPMorgan Chase' },
-            { symbol: 'BAC',  name: 'Bank of America' },
-            { symbol: 'GS',   name: 'Goldman Sachs' },
-            { symbol: 'V',    name: 'Visa' },
-            { symbol: 'XOM',  name: 'ExxonMobil' },
-            { symbol: 'WMT',  name: 'Walmart' },
-        ];
+    <!-- PROGRESS BAR -->
+    <div id="progress-container" class="progress-container" style="display:none">
+        <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
+        <div id="progress-label" class="progress-label">Connecting...</div>
+    </div>
 
-        function initTickerAutocomplete() {
-            const input = document.getElementById('symbol-input');
-            const dropdown = document.getElementById('ticker-dropdown');
-            let filteredList = [];
-            let activeIndex = -1;
+    <!-- PRICE → TARGET -->
+    <div class="price-section">
+        <div class="price-col">
+            <div class="price-col-label">Current</div>
+            <div class="price-now" id="price">--</div>
+        </div>
+        <div class="price-arrow" id="price-arrow">→</div>
+        <div class="price-col">
+            <div class="price-col-label">Target</div>
+            <div class="price-tgt" id="target-price">--</div>
+        </div>
+    </div>
 
-            function getFiltered(query) {
-                const q = query.toUpperCase().trim();
-                if (!q) return POPULAR_TICKERS;
-                return POPULAR_TICKERS.filter(t =>
-                    t.symbol.startsWith(q) || t.name.toUpperCase().includes(q)
-                );
-            }
+    <!-- PREDICTION % -->
+    <div style="text-align:center; margin:0.45rem 0;">
+        <span id="prediction-text" class="prediction flat">Predicting...</span>
+    </div>
 
-            function setActive(index) {
-                const items = dropdown.querySelectorAll('li');
-                items.forEach((li, i) => li.classList.toggle('active', i === index));
-                activeIndex = index;
-                if (index >= 0) items[index]?.scrollIntoView({ block: 'nearest' });
-            }
+    <!-- SIGNAL + CONVICTION -->
+    <div class="signal-row">
+        <span id="signal-badge" class="signal-badge"></span>
+        <span id="conviction-badge" class="conviction-badge"></span>
+    </div>
 
-            function selectTicker(symbol) {
-                input.value = symbol;
-                dropdown.style.display = 'none';
-                activeIndex = -1;
-                getPrediction();
-            }
+    <!-- MODEL CONSENSUS -->
+    <div id="consensus-display" class="consensus-display"></div>
 
-            function renderDropdown(tickers) {
-                filteredList = tickers;
-                activeIndex = -1;
-                dropdown.innerHTML = '';
-                if (tickers.length === 0) { dropdown.style.display = 'none'; return; }
-                tickers.forEach(t => {
-                    const li = document.createElement('li');
-                    li.innerHTML = `<span style="font-weight:bold; color:#c9d1d9;">${t.symbol}</span>`
-                                 + `<span style="color:#8b949e; font-size:0.78rem;">${t.name}</span>`;
-                    li.addEventListener('mousedown', e => { e.preventDefault(); selectTicker(t.symbol); });
-                    dropdown.appendChild(li);
-                });
-                dropdown.style.display = 'block';
-            }
+    <!-- DA GAUGE -->
+    <div class="da-section">
+        <div class="da-header">
+            <span class="da-label">Directional Accuracy</span>
+            <span id="da-value" style="font-weight:700; font-size:0.9rem;"></span>
+        </div>
+        <div class="da-wrap">
+            <div class="da-track">
+                <div id="da-fill" class="da-fill"></div>
+                <div class="da-tick-line" style="left:50%"></div>
+                <div class="da-tick-line" style="left:55%"></div>
+            </div>
+            <div class="da-tick-wrap">
+                <span class="da-tick-lbl" style="left:50%">50%</span>
+                <span class="da-tick-lbl" style="left:55%">55%</span>
+            </div>
+        </div>
+        <div id="da-samples" class="da-samples"></div>
+    </div>
 
-            input.addEventListener('focus', () => renderDropdown(getFiltered(input.value)));
-            input.addEventListener('input', () => {
-                input.value = input.value.toUpperCase();
-                renderDropdown(getFiltered(input.value));
-            });
-            input.addEventListener('blur', () => {
-                setTimeout(() => { dropdown.style.display = 'none'; activeIndex = -1; }, 150);
-            });
-            input.addEventListener('keydown', e => {
-                if (dropdown.style.display === 'none') return;
-                const items = dropdown.querySelectorAll('li');
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setActive(Math.min(activeIndex + 1, items.length - 1));
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setActive(Math.max(activeIndex - 1, -1));
-                } else if (e.key === 'Enter' && activeIndex >= 0 && filteredList[activeIndex]) {
-                    e.preventDefault();
-                    selectTicker(filteredList[activeIndex].symbol);
-                } else if (e.key === 'Escape') {
-                    dropdown.style.display = 'none';
-                }
-            });
+    <!-- CONTEXT: P/C · VIX · RSI · MACD -->
+    <div id="context-display" class="context-row"></div>
+    <div id="tech-display" class="tech-row"></div>
+
+    <!-- WARNINGS -->
+    <div id="warning-display" class="warnings"></div>
+
+    <div class="divider"></div>
+
+    <!-- NEWS (collapsible) -->
+    <details class="section-collapse" open>
+        <summary style="color:#58a6ff;">
+            <span class="s-arrow">▶</span> Latest Headlines
+        </summary>
+        <div class="section-body">
+            <div id="headlines-list"></div>
+            <div id="sentiment-summary" class="sentiment-summary"></div>
+        </div>
+    </details>
+
+    <!-- CALC DETAILS (collapsible) -->
+    <details class="section-collapse">
+        <summary style="color:#8b949e;">
+            <span class="s-arrow">▶</span> Calculation Details
+        </summary>
+        <div class="section-body" id="info-rows"></div>
+    </details>
+
+    <!-- ACTION ROW -->
+    <div class="action-row">
+        <button class="btn-primary" onclick="getPrediction()">Refresh Prediction</button>
+        <button id="auto-refresh-btn" class="btn-secondary" onclick="toggleAutoRefresh()">⟳ Auto</button>
+        <span id="refresh-countdown" class="countdown"></span>
+    </div>
+
+    <!-- FOOTNOTES -->
+    <div class="footnotes">
+        <p><strong>Directional Accuracy</strong> — walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon.</p>
+        <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only — Linear Regression is excluded from conviction scoring because it is too simple to reliably capture price dynamics. Weak conviction is forced near earnings or Fed meetings regardless of accuracy.</p>
+        <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment — display only, not trained into the model). <strong>VIX &gt; 20</strong> = elevated volatility / inflated options premiums.</p>
+        <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders — not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
+    </div>
+
+</div>
+
+<script>
+const POPULAR_TICKERS = [
+    { symbol: 'SPY',   name: 'S&P 500 ETF' },
+    { symbol: 'QQQ',   name: 'Nasdaq 100 ETF' },
+    { symbol: 'IWM',   name: 'Russell 2000 ETF' },
+    { symbol: 'DIA',   name: 'Dow Jones ETF' },
+    { symbol: 'GLD',   name: 'Gold ETF' },
+    { symbol: 'SLV',   name: 'Silver ETF' },
+    { symbol: 'TLT',   name: '20yr Treasury ETF' },
+    { symbol: 'VXX',   name: 'VIX Futures ETF' },
+    { symbol: 'AAPL',  name: 'Apple' },
+    { symbol: 'MSFT',  name: 'Microsoft' },
+    { symbol: 'NVDA',  name: 'NVIDIA' },
+    { symbol: 'GOOGL', name: 'Alphabet' },
+    { symbol: 'AMZN',  name: 'Amazon' },
+    { symbol: 'META',  name: 'Meta' },
+    { symbol: 'TSLA',  name: 'Tesla' },
+    { symbol: 'AMD',   name: 'AMD' },
+    { symbol: 'NFLX',  name: 'Netflix' },
+    { symbol: 'AVGO',  name: 'Broadcom' },
+    { symbol: 'JPM',   name: 'JPMorgan Chase' },
+    { symbol: 'BAC',   name: 'Bank of America' },
+    { symbol: 'GS',    name: 'Goldman Sachs' },
+    { symbol: 'V',     name: 'Visa' },
+    { symbol: 'XOM',   name: 'ExxonMobil' },
+    { symbol: 'WMT',   name: 'Walmart' },
+    { symbol: 'COIN',  name: 'Coinbase' },
+    { symbol: 'MSTR',  name: 'MicroStrategy' },
+];
+
+const TICKER_NAMES = {};
+POPULAR_TICKERS.forEach(t => { TICKER_NAMES[t.symbol] = t.name; });
+
+// ── PROGRESS BAR ──────────────────────────────────────────
+let _progressTimer = null;
+
+function startProgress() {
+    document.getElementById('progress-container').style.display = 'block';
+    const fill  = document.getElementById('progress-fill');
+    const label = document.getElementById('progress-label');
+    const stages = [
+        [12, 'Connecting to market data...'],
+        [30, 'Downloading price history...'],
+        [50, 'Computing indicators...'],
+        [68, 'Running ML models...'],
+        [83, 'Calculating signals...'],
+        [92, 'Finalizing...'],
+    ];
+    let idx = 0;
+    fill.style.width  = stages[0][0] + '%';
+    label.textContent = stages[0][1];
+    idx = 1;
+    _progressTimer = setInterval(() => {
+        if (idx < stages.length) {
+            fill.style.width  = stages[idx][0] + '%';
+            label.textContent = stages[idx][1];
+            idx++;
         }
+    }, 2200);
+}
 
-        function populateExpirations() {
-            const select = document.getElementById('horizon-select');
+function finishProgress() {
+    if (_progressTimer) { clearInterval(_progressTimer); _progressTimer = null; }
+    const fill      = document.getElementById('progress-fill');
+    const label     = document.getElementById('progress-label');
+    const container = document.getElementById('progress-container');
+    fill.style.width  = '100%';
+    label.textContent = 'Done!';
+    setTimeout(() => {
+        container.style.display = 'none';
+        fill.style.transition = 'none';
+        fill.style.width = '0%';
+        setTimeout(() => { fill.style.transition = 'width 0.85s ease'; }, 60);
+    }, 550);
+}
 
-            function getTradingDays(calendarDaysAhead) {
-                let count = 0;
-                let d = new Date();
-                for(let i = 0; i < calendarDaysAhead; i++) {
-                    d.setDate(d.getDate() + 1);
-                    if(d.getDay() !== 0 && d.getDay() !== 6) count++;
-                }
-                return count;
-            }
+function failProgress(msg) {
+    if (_progressTimer) { clearInterval(_progressTimer); _progressTimer = null; }
+    const fill  = document.getElementById('progress-fill');
+    const label = document.getElementById('progress-label');
+    fill.style.width      = '100%';
+    fill.style.background = '#f85149';
+    label.textContent     = msg || 'Error — check connection';
+    setTimeout(() => {
+        document.getElementById('progress-container').style.display = 'none';
+        fill.style.background = '';
+    }, 2000);
+}
 
-            const today = new Date();
-            const dayOfWeek = today.getDay();
-            let daysToFriday = (5 - dayOfWeek + 7) % 7;
-            if (daysToFriday === 0) daysToFriday = 7;
+// ── AUTO-REFRESH ──────────────────────────────────────────
+let _refreshTimer   = null;
+let _countdownTimer = null;
+let _countdownSecs  = 300;
 
-            const eowTradingDays = getTradingDays(daysToFriday);
-            const nextEowTradingDays = getTradingDays(daysToFriday + 7);
+function toggleAutoRefresh() {
+    const btn = document.getElementById('auto-refresh-btn');
+    const cd  = document.getElementById('refresh-countdown');
+    if (_refreshTimer) {
+        clearInterval(_refreshTimer);
+        clearInterval(_countdownTimer);
+        _refreshTimer = _countdownTimer = null;
+        btn.classList.remove('active');
+        btn.textContent = '⟳ Auto';
+        cd.textContent  = '';
+    } else {
+        _countdownSecs = 300;
+        _refreshTimer = setInterval(() => { getPrediction(); _countdownSecs = 300; }, 300_000);
+        _countdownTimer = setInterval(() => {
+            _countdownSecs = Math.max(0, _countdownSecs - 1);
+            const m = Math.floor(_countdownSecs / 60);
+            const s = _countdownSecs % 60;
+            cd.textContent = `${m}:${s.toString().padStart(2, '0')}`;
+        }, 1000);
+        btn.classList.add('active');
+        btn.textContent = '⟳ Auto: ON';
+        cd.textContent  = '5:00';
+    }
+}
 
-            const options = [
-                { value: 1, label: "1 Trading Day (Tomorrow)" },
-                { value: eowTradingDays, label: `End of This Week (${eowTradingDays} Trading Days left)` },
-                { value: nextEowTradingDays, label: `End of Next Week (${nextEowTradingDays} Trading Days left)` },
-                { value: 21, label: "Standard Options Month (21 Trading Days)" }
-            ];
+// ── TICKER AUTOCOMPLETE ───────────────────────────────────
+function initTickerAutocomplete() {
+    const input    = document.getElementById('symbol-input');
+    const dropdown = document.getElementById('ticker-dropdown');
+    let filteredList = [];
+    let activeIndex  = -1;
 
-            options.forEach(opt => {
-                if(opt.value > 0) {
-                    const el = document.createElement('option');
-                    el.value = opt.value;
-                    el.innerText = opt.label;
-                    select.appendChild(el);
-                }
-            });
-        }
-        populateExpirations();
-        initTickerAutocomplete();
+    function getFiltered(q) {
+        q = q.toUpperCase().trim();
+        if (!q) return POPULAR_TICKERS;
+        return POPULAR_TICKERS.filter(t =>
+            t.symbol.startsWith(q) || t.name.toUpperCase().includes(q)
+        );
+    }
 
-        async function getPrediction() {
-            const selectedModel = document.getElementById('model-select').value;
-            const selectedHorizon = document.getElementById('horizon-select').value;
-            const selectedSymbol = document.getElementById('symbol-input').value.trim().toUpperCase() || 'SPY';
+    function setActive(i) {
+        dropdown.querySelectorAll('li').forEach((li, j) => li.classList.toggle('active', j === i));
+        activeIndex = i;
+        if (i >= 0) dropdown.querySelectorAll('li')[i]?.scrollIntoView({ block: 'nearest' });
+    }
 
-            document.getElementById('symbol').innerText = selectedSymbol + " Dashboard";
-            document.getElementById('price').innerText = "Loading...";
-            document.getElementById('prediction-text').innerText = "Predicting...";
-            document.getElementById('prediction-text').className = "prediction";
-
-            try {
-                // Local dev: "uvicorn api.main:app --reload" runs backend on localhost:8000
-                // Production: API is hosted on Render — replace the URL below with your Render service URL after deploy
-                const PROD_API_URL = "https://trading-app-api-3d6f.onrender.com/";
-                const isLocal = window.location.hostname === "127.0.0.1" ||
-                                window.location.hostname === "localhost" ||
-                                window.location.protocol === "file:";
-                const baseUrl = (isLocal ? "http://127.0.0.1:8000" : PROD_API_URL).replace(/\/$/, "");
-
-                const response = await fetch(`${baseUrl}/predict?model=${selectedModel}&horizon=${selectedHorizon}&symbol=${selectedSymbol}`);
-                const data = await response.json();
-
-                document.getElementById('symbol').innerText = data.symbol + " Dashboard";
-                document.getElementById('price').innerText = "$" + data.current_price;
-
-                const predEl = document.getElementById('prediction-text');
-                const pct = data.predicted_change_pct;
-                const timeText = data.horizon_days == 1 ? "Tomorrow" : `In ${data.horizon_days} Days`;
-
-                if (pct >= 0) {
-                    predEl.innerText = `${timeText}: +${pct}%`;
-                    predEl.className = "prediction up";
-                } else {
-                    predEl.innerText = `${timeText}: ${pct}%`;
-                    predEl.className = "prediction down";
-                }
-
-                // Signal badge
-                const sigBadge  = document.getElementById('signal-badge');
-                const convBadge = document.getElementById('conviction-badge');
-                const sigColor  = data.signal === 'BUY'  ? '#3fb950'
-                                : data.signal === 'SELL' ? '#f85149' : '#8b949e';
-                const sigBg     = data.signal === 'BUY'  ? 'rgba(63,185,80,0.12)'
-                                : data.signal === 'SELL' ? 'rgba(248,81,73,0.12)' : 'rgba(139,148,158,0.12)';
-                const sigArrow  = data.signal === 'BUY' ? '▲ ' : data.signal === 'SELL' ? '▼ ' : '● ';
-                sigBadge.textContent = sigArrow + data.signal;
-                sigBadge.style.color      = sigColor;
-                sigBadge.style.background = sigBg;
-                sigBadge.style.border     = `1px solid ${sigColor}`;
-
-                const convColor = data.conviction === 'Strong'   ? '#3fb950'
-                                : data.conviction === 'Moderate' ? '#d29922' : '#8b949e';
-                convBadge.textContent     = data.conviction + ' Conviction';
-                convBadge.style.color     = convColor;
-                convBadge.style.background= convColor + '22';
-                convBadge.style.border    = `1px solid ${convColor}55`;
-
-                // Model consensus
-                const consensusEl = document.getElementById('consensus-display');
-                if (data.consensus_results) {
-                    const primaryDir = data.predicted_change_pct >= 0 ? 'up' : 'down';
-                    let html = 'Models: ';
-                    for (const [label, dir] of Object.entries(data.consensus_results)) {
-                        const c = dir === 'up' ? '#3fb950' : '#f85149';
-                        const a = dir === 'up' ? '▲' : '▼';
-                        html += `<span style="color:${c}; margin:0 0.4rem;" title="${label}">${a} ${label}</span>`;
-                    }
-                    consensusEl.innerHTML = html;
-                } else {
-                    consensusEl.innerHTML = '';
-                }
-
-                // Directional accuracy
-                const confEl = document.getElementById('conf-val');
-                if (data.directional_accuracy !== null && data.directional_accuracy !== undefined) {
-                    const da = data.directional_accuracy;
-                    const daColor = da >= 55 ? '#3fb950' : da >= 50 ? '#d29922' : '#f85149';
-                    confEl.innerHTML = `Directional Accuracy: <span style="color:${daColor}; font-weight:bold;">${da}%</span>`
-                                     + ` <span style="color:#484f58;">(${data.backtest_samples} backtested days)</span>`;
-                } else {
-                    confEl.innerText = "Confidence: " + data.confidence + "%";
-                }
-
-                // P/C ratio + context
-                const ctxEl = document.getElementById('context-display');
-                let ctxParts = [];
-                if (data.put_call_ratio !== null && data.put_call_ratio !== undefined) {
-                    const pc = data.put_call_ratio;
-                    const pcColor = pc < 0.8 ? '#3fb950' : pc > 1.2 ? '#f85149' : '#8b949e';
-                    const pcLabel = pc < 0.7 ? 'Very Bullish' : pc < 0.9 ? 'Bullish'
-                                  : pc > 1.4 ? 'Very Bearish' : pc > 1.1 ? 'Bearish' : 'Neutral';
-                    ctxParts.push(`P/C Ratio: <span style="color:${pcColor}; font-weight:bold;">${pc}</span> <span style="color:#484f58;">${pcLabel}</span>`);
-                }
-                ctxEl.innerHTML = ctxParts.join(' &nbsp;·&nbsp; ');
-
-                // Warnings
-                const warnEl = document.getElementById('warning-display');
-                const warnings = [];
-                if (data.earnings_flag) warnings.push('Near earnings date — model reliability reduced');
-                if (data.fomc_flag)     warnings.push('Near Fed meeting — expect elevated volatility');
-                if (data.signal_note && !data.earnings_flag && !data.fomc_flag)
-                    warnings.push(data.signal_note);
-                warnEl.innerHTML = warnings.map(w => `<div class="warning-item">⚠️ ${w}</div>`).join('');
-
-                // Render headlines
-                const headlinesList = document.getElementById('headlines-list');
-                const sentimentSummary = document.getElementById('sentiment-summary');
-
-                if (data.headlines && data.headlines.length > 0) {
-                    headlinesList.innerHTML = data.headlines.map(h => {
-                        const color = h.sentiment > 0.05 ? '#3fb950'
-                                    : h.sentiment < -0.05 ? '#f85149'
-                                    : '#8b949e';
-                        const badge = h.sentiment > 0.05 ? '▲'
-                                    : h.sentiment < -0.05 ? '▼'
-                                    : '–';
-                        const titleHtml = h.url
-                            ? `<a href="${h.url}" target="_blank" rel="noopener noreferrer" 
-                                style="color:#c9d1d9; text-decoration:none; border-bottom: 1px dotted #484f58;"
-                                onmouseover="this.style.color='#58a6ff'" 
-                                onmouseout="this.style.color='#c9d1d9'">${h.title}</a>`
-                            : h.title;
-                        return `<div style="font-size:0.78rem; padding:0.35rem 0; border-bottom:1px solid #21262d; line-height:1.4;">
-                            <span style="color:${color}; font-weight:bold;">${badge}</span> ${titleHtml}
-                        </div>`;
-                    }).join('');
-
-                    const overallColor = data.news_sentiment > 0.05 ? '#3fb950'
-                                    : data.news_sentiment < -0.05 ? '#f85149'
-                                    : '#8b949e';
-                    sentimentSummary.innerHTML = `Avg sentiment: <span style="color:${overallColor}; font-weight:bold;">${data.news_sentiment > 0 ? '+' : ''}${data.news_sentiment}</span>`;
-                } else {
-                    headlinesList.innerHTML = '<div style="font-size:0.78rem; color:#484f58;">No headlines found.</div>';
-                    sentimentSummary.innerHTML = '';
-                }
-
-                // Populate info panel
-                const infoRows = document.getElementById('info-rows');
-                const oobLine = data.oob_score !== null
-                    ? `<div class="info-row"><span class="info-label">OOB Score</span><span class="info-value">${data.oob_score}%</span></div>`
-                    : '';
-
-                const fitLine = data.fit_score !== null && data.fit_score !== undefined
-                    ? `<div class="info-row"><span class="info-label">In-Sample Fit (R²)</span><span class="info-value">${data.fit_score}%</span></div>`
-                    : '';
-                infoRows.innerHTML = `
-                    <div class="info-row"><span class="info-label">Model</span><span class="info-value">${data.model_used}</span></div>
-                    <div class="info-row"><span class="info-label">Training Rows</span><span class="info-value">${data.training_rows.toLocaleString()} days</span></div>
-                    <div class="info-row"><span class="info-label">Data From</span><span class="info-value">${data.training_start}</span></div>
-                    <div class="info-row"><span class="info-label">Data To</span><span class="info-value">${data.training_end}</span></div>
-                    <div class="info-row"><span class="info-label">Features Used</span><span class="info-value">${data.features_used}</span></div>
-                    ${fitLine}
-                    ${oobLine}
-                `;
-
-            } catch (error) {
-                console.error("Error fetching prediction:", error);
-                document.getElementById('symbol').innerText = "Backend Offline";
-                document.getElementById('price').innerText = "--";
-            }
-        }
-
+    function selectTicker(symbol) {
+        input.value = symbol;
+        dropdown.style.display = 'none';
+        activeIndex = -1;
         getPrediction();
-    </script>
+    }
+
+    function renderDropdown(tickers) {
+        filteredList = tickers;
+        activeIndex  = -1;
+        dropdown.innerHTML = '';
+        if (!tickers.length) { dropdown.style.display = 'none'; return; }
+        tickers.forEach(t => {
+            const li = document.createElement('li');
+            li.innerHTML = `<span style="font-weight:700; color:#c9d1d9;">${t.symbol}</span>`
+                         + `<span style="color:#8b949e; font-size:0.77rem;">${t.name}</span>`;
+            li.addEventListener('mousedown', e => { e.preventDefault(); selectTicker(t.symbol); });
+            dropdown.appendChild(li);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    input.addEventListener('focus', () => renderDropdown(getFiltered(input.value)));
+    input.addEventListener('input', () => { input.value = input.value.toUpperCase(); renderDropdown(getFiltered(input.value)); });
+    input.addEventListener('blur',  () => setTimeout(() => { dropdown.style.display = 'none'; activeIndex = -1; }, 150));
+    input.addEventListener('keydown', e => {
+        if (dropdown.style.display === 'none') { if (e.key === 'Enter') getPrediction(); return; }
+        const items = dropdown.querySelectorAll('li');
+        if      (e.key === 'ArrowDown')  { e.preventDefault(); setActive(Math.min(activeIndex + 1, items.length - 1)); }
+        else if (e.key === 'ArrowUp')    { e.preventDefault(); setActive(Math.max(activeIndex - 1, -1)); }
+        else if (e.key === 'Enter')      { e.preventDefault(); if (activeIndex >= 0 && filteredList[activeIndex]) selectTicker(filteredList[activeIndex].symbol); else getPrediction(); }
+        else if (e.key === 'Escape')     { dropdown.style.display = 'none'; }
+    });
+}
+
+// ── HORIZON OPTIONS ───────────────────────────────────────
+function populateHorizons() {
+    const select = document.getElementById('horizon-select');
+
+    function tradingDaysAhead(calDays) {
+        let count = 0, d = new Date();
+        for (let i = 0; i < calDays; i++) {
+            d.setDate(d.getDate() + 1);
+            if (d.getDay() !== 0 && d.getDay() !== 6) count++;
+        }
+        return count;
+    }
+
+    const dow        = new Date().getDay();
+    const daysToFri  = (5 - dow + 7) % 7 || 7;
+    const eowTD      = tradingDaysAhead(daysToFri);
+    const nextEowTD  = tradingDaysAhead(daysToFri + 7);
+
+    [
+        { value: 1,        label: 'Tomorrow — 1 DTE' },
+        { value: 3,        label: '3 Days' },
+        { value: eowTD,    label: `End of Week — ${eowTD} DTE` },
+        { value: nextEowTD,label: `Next Week — ${nextEowTD} DTE` },
+        { value: 21,       label: 'Monthly — 21 DTE (Std Options)' },
+        { value: 42,       label: '2 Months — 42 DTE' },
+        { value: 63,       label: 'Quarterly — 63 DTE' },
+    ].forEach(opt => {
+        if (opt.value > 0) {
+            const el = document.createElement('option');
+            el.value = opt.value;
+            el.textContent = opt.label;
+            select.appendChild(el);
+        }
+    });
+    select.value = 21;
+}
+
+// ── DA GAUGE ──────────────────────────────────────────────
+function renderDAGauge(da, samples) {
+    const fill     = document.getElementById('da-fill');
+    const valEl    = document.getElementById('da-value');
+    const samplesEl = document.getElementById('da-samples');
+
+    if (da == null) {
+        fill.style.width  = '0%';
+        valEl.textContent = 'N/A';
+        valEl.style.color = '#8b949e';
+        samplesEl.textContent = '';
+        return;
+    }
+    const pct   = Math.min(Math.max(da, 0), 100);
+    const color = da >= 55 ? '#3fb950' : da >= 50 ? '#d29922' : '#f85149';
+    fill.style.width      = pct + '%';
+    fill.style.background = color;
+    valEl.textContent     = da + '%';
+    valEl.style.color     = color;
+    if (samples) samplesEl.textContent = samples + ' backtested samples';
+}
+
+// ── MAIN PREDICTION ───────────────────────────────────────
+async function getPrediction() {
+    const model   = document.getElementById('model-select').value;
+    const horizon = document.getElementById('horizon-select').value;
+    const symbol  = document.getElementById('symbol-input').value.trim().toUpperCase() || 'SPY';
+
+    document.getElementById('symbol-title').textContent  = symbol + ' Dashboard';
+    document.getElementById('ticker-desc').textContent   = TICKER_NAMES[symbol] || '';
+    document.getElementById('last-updated').textContent  = '';
+    document.getElementById('price').textContent         = '...';
+    document.getElementById('target-price').textContent  = '...';
+    document.getElementById('prediction-text').textContent = 'Predicting...';
+    document.getElementById('prediction-text').className  = 'prediction flat';
+    document.getElementById('signal-badge').textContent   = '';
+    document.getElementById('conviction-badge').textContent = '';
+    document.getElementById('consensus-display').innerHTML = '';
+    document.getElementById('context-display').innerHTML   = '';
+    document.getElementById('tech-display').innerHTML      = '';
+    document.getElementById('warning-display').innerHTML   = '';
+    renderDAGauge(null, null);
+
+    startProgress();
+
+    try {
+        const PROD_API  = 'https://trading-app-api-3d6f.onrender.com';
+        const isLocal   = ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+                       || window.location.protocol === 'file:';
+        const baseUrl   = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
+
+        const res  = await fetch(`${baseUrl}/predict?model=${model}&horizon=${horizon}&symbol=${symbol}`);
+        const data = await res.json();
+
+        finishProgress();
+
+        document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+        // ── Prices ──
+        document.getElementById('price').textContent = '$' + data.current_price;
+
+        const targetVal = data.current_price * (1 + data.predicted_change_pct / 100);
+        const tgtEl     = document.getElementById('target-price');
+        tgtEl.textContent = '$' + targetVal.toFixed(2);
+        tgtEl.style.color = data.predicted_change_pct >= 0 ? '#3fb950' : '#f85149';
+
+        const arrowEl = document.getElementById('price-arrow');
+        arrowEl.style.color = data.predicted_change_pct >= 0 ? '#3fb950' : '#f85149';
+
+        // ── Prediction text ──
+        const predEl   = document.getElementById('prediction-text');
+        const pct      = data.predicted_change_pct;
+        const timeText = data.horizon_days === 1 ? 'Tomorrow' : `In ${data.horizon_days} Days`;
+        predEl.textContent = `${timeText}: ${pct >= 0 ? '+' : ''}${pct}%`;
+        predEl.className   = 'prediction ' + (pct >= 0 ? 'up' : 'down');
+
+        // ── Signal badge ──
+        const sigBadge  = document.getElementById('signal-badge');
+        const convBadge = document.getElementById('conviction-badge');
+        const sigColor  = data.signal === 'BUY'  ? '#3fb950'
+                        : data.signal === 'SELL' ? '#f85149' : '#8b949e';
+        const sigBg     = data.signal === 'BUY'  ? 'rgba(63,185,80,0.12)'
+                        : data.signal === 'SELL' ? 'rgba(248,81,73,0.12)' : 'rgba(139,148,158,0.12)';
+        const sigArrow  = data.signal === 'BUY' ? '▲ ' : data.signal === 'SELL' ? '▼ ' : '● ';
+        sigBadge.textContent = sigArrow + data.signal;
+        sigBadge.style.cssText = `color:${sigColor}; background:${sigBg}; border:1px solid ${sigColor};`;
+
+        const convColor = data.conviction === 'Strong'   ? '#3fb950'
+                        : data.conviction === 'Moderate' ? '#d29922' : '#8b949e';
+        convBadge.textContent = data.conviction + ' Conviction';
+        convBadge.style.cssText = `color:${convColor}; background:${convColor}22; border:1px solid ${convColor}55;`;
+
+        // ── Model consensus ──
+        const consEl = document.getElementById('consensus-display');
+        if (data.consensus_results) {
+            let html = '<span style="color:#484f58;">Models:</span> ';
+            for (const [label, dir] of Object.entries(data.consensus_results)) {
+                const c = dir === 'up' ? '#3fb950' : '#f85149';
+                const a = dir === 'up' ? '▲' : '▼';
+                html += `<span style="color:${c}; margin:0 0.3rem;">${a} ${label}</span>`;
+            }
+            consEl.innerHTML = html;
+        }
+
+        // ── DA gauge ──
+        renderDAGauge(data.directional_accuracy, data.backtest_samples);
+
+        // ── Context row: P/C + VIX ──
+        const ctxEl = document.getElementById('context-display');
+        const ctxParts = [];
+
+        if (data.put_call_ratio != null) {
+            const pc       = data.put_call_ratio;
+            const pcColor  = pc < 0.8 ? '#3fb950' : pc > 1.2 ? '#f85149' : '#8b949e';
+            const pcLabel  = pc < 0.7 ? 'Very Bullish' : pc < 0.9 ? 'Bullish'
+                           : pc > 1.4 ? 'Very Bearish' : pc > 1.1 ? 'Bearish' : 'Neutral';
+            ctxParts.push(`<span>P/C: <span style="color:${pcColor}; font-weight:700;">${pc}</span> <span style="color:#484f58; font-size:0.75rem;">${pcLabel}</span></span>`);
+        }
+
+        if (data.vix_close != null) {
+            const vix      = data.vix_close;
+            const vixColor = vix > 30 ? '#f85149' : vix > 20 ? '#d29922' : '#3fb950';
+            const vixLabel = vix > 30 ? 'High Fear' : vix > 20 ? 'Elevated' : 'Low';
+            ctxParts.push(`<span>VIX: <span style="color:${vixColor}; font-weight:700;">${vix}</span> <span style="color:#484f58; font-size:0.75rem;">${vixLabel}</span></span>`);
+        }
+
+        ctxEl.innerHTML = ctxParts.join('<span style="color:#30363d;"> · </span>');
+
+        // ── Tech row: RSI + MACD ──
+        const techEl    = document.getElementById('tech-display');
+        const techParts = [];
+
+        if (data.rsi != null) {
+            const rsiColor = data.rsi > 70 ? '#f85149' : data.rsi < 30 ? '#3fb950' : '#8b949e';
+            const rsiLabel = data.rsi > 70 ? 'Overbought' : data.rsi < 30 ? 'Oversold' : 'Neutral';
+            techParts.push(`<span>RSI: <span style="color:${rsiColor}; font-weight:700;">${data.rsi}</span> <span style="color:#484f58; font-size:0.72rem;">${rsiLabel}</span></span>`);
+        }
+
+        if (data.macd != null) {
+            const macdColor = data.macd >= 0 ? '#3fb950' : '#f85149';
+            const macdSign  = data.macd >= 0 ? '+' : '';
+            techParts.push(`<span>MACD: <span style="color:${macdColor}; font-weight:700;">${macdSign}${data.macd}</span></span>`);
+        }
+
+        techEl.innerHTML = techParts.join('<span style="color:#30363d;"> · </span>');
+
+        // ── Warnings ──
+        const warnEl   = document.getElementById('warning-display');
+        const warnings = [];
+        if (data.earnings_flag) warnings.push('Near earnings date — model reliability reduced, elevated volatility expected');
+        if (data.fomc_flag)     warnings.push('Near Fed meeting — expect elevated volatility regardless of signal');
+        if (data.signal_note && !data.earnings_flag && !data.fomc_flag) warnings.push(data.signal_note);
+        warnEl.innerHTML = warnings.map(w => `<div class="warning-item">⚠ ${w}</div>`).join('');
+
+        // ── Headlines ──
+        const headlinesList   = document.getElementById('headlines-list');
+        const sentimentSummary = document.getElementById('sentiment-summary');
+
+        if (data.headlines && data.headlines.length > 0) {
+            headlinesList.innerHTML = data.headlines.map(h => {
+                const color = h.sentiment > 0.05 ? '#3fb950' : h.sentiment < -0.05 ? '#f85149' : '#8b949e';
+                const badge = h.sentiment > 0.05 ? '▲' : h.sentiment < -0.05 ? '▼' : '–';
+                const titleHtml = h.url
+                    ? `<a href="${h.url}" target="_blank" rel="noopener noreferrer"
+                          style="color:#c9d1d9; text-decoration:none; border-bottom:1px dotted #484f58;"
+                          onmouseover="this.style.color='#58a6ff'"
+                          onmouseout="this.style.color='#c9d1d9'">${h.title}</a>`
+                    : h.title;
+                return `<div class="news-headline"><span style="color:${color}; font-weight:700;">${badge}</span> ${titleHtml}</div>`;
+            }).join('');
+            const oc = data.news_sentiment > 0.05 ? '#3fb950' : data.news_sentiment < -0.05 ? '#f85149' : '#8b949e';
+            sentimentSummary.innerHTML = `Avg sentiment: <span style="color:${oc}; font-weight:700;">${data.news_sentiment > 0 ? '+' : ''}${data.news_sentiment}</span>`;
+        } else {
+            headlinesList.innerHTML = '<div style="font-size:0.78rem; color:#484f58;">No headlines found.</div>';
+            sentimentSummary.innerHTML = '';
+        }
+
+        // ── Info panel ──
+        const infoRows = document.getElementById('info-rows');
+        const rsiLine  = data.rsi  != null ? `<div class="info-row"><span class="info-label">RSI (14)</span><span class="info-value">${data.rsi}</span></div>` : '';
+        const macdLine = data.macd != null ? `<div class="info-row"><span class="info-label">MACD</span><span class="info-value">${data.macd}</span></div>` : '';
+        const vixLine  = data.vix_close != null ? `<div class="info-row"><span class="info-label">VIX</span><span class="info-value">${data.vix_close}</span></div>` : '';
+        const oobLine  = data.oob_score != null ? `<div class="info-row"><span class="info-label">OOB Score</span><span class="info-value">${data.oob_score}%</span></div>` : '';
+        const fitLine  = data.fit_score != null ? `<div class="info-row"><span class="info-label">In-Sample Fit (R²)</span><span class="info-value">${data.fit_score}%</span></div>` : '';
+
+        infoRows.innerHTML = `
+            <div class="info-row"><span class="info-label">Model</span><span class="info-value">${data.model_used}</span></div>
+            <div class="info-row"><span class="info-label">Training Rows</span><span class="info-value">${data.training_rows.toLocaleString()} days</span></div>
+            <div class="info-row"><span class="info-label">Data Range</span><span class="info-value">${data.training_start} → ${data.training_end}</span></div>
+            <div class="info-row"><span class="info-label">Features Used</span><span class="info-value">${data.features_used}</span></div>
+            ${rsiLine}${macdLine}${vixLine}${fitLine}${oobLine}
+        `;
+
+    } catch (err) {
+        failProgress('Backend offline or error');
+        console.error(err);
+        document.getElementById('symbol-title').textContent = 'Backend Offline';
+        document.getElementById('price').textContent        = '--';
+        document.getElementById('target-price').textContent = '--';
+    }
+}
+
+populateHorizons();
+initTickerAutocomplete();
+getPrediction();
+</script>
 </body>
 </html>
