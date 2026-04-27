@@ -4,7 +4,58 @@ import yfinance as yf
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
 from textblob import TextBlob
+
+
+def build_model(name: str):
+    """Returns (estimator, display_name). Centralizes model config so backtest and live prediction stay in sync."""
+    if name == "rf":
+        return RandomForestRegressor(
+            n_estimators=200, random_state=42, oob_score=True,
+            max_depth=6, min_samples_leaf=5, max_features="sqrt"
+        ), "Random Forest"
+    if name == "xgb":
+        return XGBRegressor(
+            n_estimators=300, max_depth=4, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8, random_state=42,
+            n_jobs=1, verbosity=0
+        ), "XGBoost"
+    return LinearRegression(), "Linear Regression"
+
+
+def walk_forward_directional_accuracy(train_data, features, target_col, model_name,
+                                      n_windows=4, test_size=80):
+    """
+    Honest out-of-sample directional accuracy.
+    For each window: train on everything before, predict the next test_size days,
+    score whether the predicted sign matched the actual sign. Returns (accuracy, n_predictions).
+    """
+    correct = 0
+    total = 0
+    n = len(train_data)
+
+    for i in range(n_windows):
+        end_idx = n - i * test_size
+        start_idx = end_idx - test_size
+        if start_idx < 250:  # need a meaningful training history
+            break
+
+        train = train_data.iloc[:start_idx]
+        test = train_data.iloc[start_idx:end_idx]
+
+        m, _ = build_model(model_name)
+        m.fit(train[features], train[target_col])
+        preds = m.predict(test[features])
+        actuals = test[target_col].values
+
+        # Sign agreement (treat 0 as "up" — rare in pct change data anyway)
+        correct += int(((preds >= 0) == (actuals >= 0)).sum())
+        total += len(preds)
+
+    if total == 0:
+        return None, 0
+    return round(correct / total * 100, 1), total
 
 app = FastAPI()
 
@@ -120,20 +171,7 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
     ]
 
     # --- ENGINE SWAP ---
-    if model == "rf":
-        ml_engine = RandomForestRegressor(
-            n_estimators=200,
-            random_state=42,
-            oob_score=True,
-            max_depth=6,
-            min_samples_leaf=5,
-            max_features="sqrt"
-        )
-        model_name = "Random Forest"
-    else:
-        ml_engine = LinearRegression()
-        model_name = "Linear Regression"
-
+    ml_engine, model_name = build_model(model)
     ml_engine.fit(train_data[features], train_data['Target_Future_Pct'])
 
     if model == "rf":
@@ -142,11 +180,15 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
         r_squared = ml_engine.score(train_data[features], train_data['Target_Future_Pct'])
 
     prediction = ml_engine.predict(today_data[features])
-
     pred_val = prediction.item()
     price_val = today_data['Close'].item()
 
-    final_confidence = max(0, round(float(r_squared) * 100, 1))
+    fit_score = max(0, round(float(r_squared) * 100, 1))
+
+    # --- WALK-FORWARD DIRECTIONAL ACCURACY (the real confidence) ---
+    directional_accuracy, backtest_samples = walk_forward_directional_accuracy(
+        train_data, features, 'Target_Future_Pct', model
+    )
 
     # --- INFO PANEL DATA ---
     training_start = train_data.index[0].strftime('%Y-%m-%d')
@@ -158,7 +200,10 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
         "symbol": symbol.upper(),
         "predicted_change_pct": round(float(pred_val), 3),
         "current_price": round(float(price_val), 2),
-        "confidence": final_confidence,
+        "confidence": directional_accuracy if directional_accuracy is not None else fit_score,
+        "directional_accuracy": directional_accuracy,
+        "backtest_samples": backtest_samples,
+        "fit_score": fit_score,
         "model_used": model_name,
         "horizon_days": horizon,
         # Info panel fields

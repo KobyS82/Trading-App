@@ -174,6 +174,7 @@
         <select id="model-select" onchange="getPrediction()">
             <option value="linear">Model: Linear Regression (Calc 3)</option>
             <option value="rf">Model: Random Forest (Advanced)</option>
+            <option value="xgb" selected>Model: XGBoost (Best)</option>
         </select>
 
         <select id="horizon-select" onchange="getPrediction()"></select>
@@ -207,8 +208,9 @@
 
         <!-- Footer notes -->
         <div class="footnotes">
-            <p>⚠️ <strong>Linear Regression</strong> confidence is in-sample R² and tends to be overstated — treat it as a rough fit score, not a real-world accuracy measure.</p>
-            <p>✅ <strong>Random Forest</strong> confidence uses Out-of-Bag (OOB) scoring, which is validated on data the model never trained on — a closer proxy to real-world performance.</p>
+            <p><strong>Directional Accuracy</strong> is computed via <em>walk-forward backtesting</em>: the model is retrained on past-only data and tested on the next ~80 days, repeated across 4 windows. The % shown is how often it correctly called UP vs. DOWN on data it never saw during training.</p>
+            <p>🎯 <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip on this ticker/horizon.</p>
+            <p>The old in-sample fit score (R²/OOB) is now in the Calculation Details panel — useful for diagnostics but <strong>not</strong> a measure of real-world trading performance.</p>
         </div>
     </div>
 
@@ -383,7 +385,15 @@
                     predEl.className = "prediction down";
                 }
 
-                document.getElementById('conf-val').innerText = "Confidence: " + data.confidence + "%";
+                const confEl = document.getElementById('conf-val');
+                if (data.directional_accuracy !== null && data.directional_accuracy !== undefined) {
+                    const da = data.directional_accuracy;
+                    const daColor = da >= 55 ? '#3fb950' : da >= 50 ? '#d29922' : '#f85149';
+                    confEl.innerHTML = `Directional Accuracy: <span style="color:${daColor}; font-weight:bold;">${da}%</span>`
+                                     + ` <span style="color:#484f58;">(${data.backtest_samples} backtested days)</span>`;
+                } else {
+                    confEl.innerText = "Confidence: " + data.confidence + "%";
+                }
 
                 // Render headlines
                 const headlinesList = document.getElementById('headlines-list');
@@ -423,11 +433,16 @@
                     ? `<div class="info-row"><span class="info-label">OOB Score</span><span class="info-value">${data.oob_score}%</span></div>`
                     : '';
 
+                const fitLine = data.fit_score !== null && data.fit_score !== undefined
+                    ? `<div class="info-row"><span class="info-label">In-Sample Fit (R²)</span><span class="info-value">${data.fit_score}%</span></div>`
+                    : '';
                 infoRows.innerHTML = `
+                    <div class="info-row"><span class="info-label">Model</span><span class="info-value">${data.model_used}</span></div>
                     <div class="info-row"><span class="info-label">Training Rows</span><span class="info-value">${data.training_rows.toLocaleString()} days</span></div>
                     <div class="info-row"><span class="info-label">Data From</span><span class="info-value">${data.training_start}</span></div>
                     <div class="info-row"><span class="info-label">Data To</span><span class="info-value">${data.training_end}</span></div>
                     <div class="info-row"><span class="info-label">Features Used</span><span class="info-value">${data.features_used}</span></div>
+                    ${fitLine}
                     ${oobLine}
                 `;
 
