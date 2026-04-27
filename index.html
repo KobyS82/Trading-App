@@ -152,6 +152,15 @@
 
         <div id="conf-val" style="margin-top:0.5rem; font-size:0.9rem; color:#8b949e;"></div>
 
+        <!-- News headlines -->
+        <div id="news-section" style="margin-top: 1.5rem; text-align: left;">
+            <div style="font-size:0.8rem; color:#58a6ff; font-weight:bold; margin-bottom:0.5rem;">
+                📰 Latest Headlines
+            </div>
+            <div id="headlines-list"></div>
+            <div id="sentiment-summary" style="font-size:0.8rem; color:#8b949e; margin-top:0.5rem;"></div>
+        </div>
+
         <!-- Collapsible info panel -->
         <div class="info-panel">
             <details>
@@ -245,6 +254,32 @@
                 }
 
                 document.getElementById('conf-val').innerText = "Confidence: " + data.confidence + "%";
+
+                // Render headlines
+                const headlinesList = document.getElementById('headlines-list');
+                const sentimentSummary = document.getElementById('sentiment-summary');
+
+                if (data.headlines && data.headlines.length > 0) {
+                    headlinesList.innerHTML = data.headlines.map(h => {
+                        const color = h.sentiment > 0.05 ? '#3fb950'
+                                    : h.sentiment < -0.05 ? '#f85149'
+                                    : '#8b949e';
+                        const badge = h.sentiment > 0.05 ? '▲'
+                                    : h.sentiment < -0.05 ? '▼'
+                                    : '–';
+                        return `<div style="font-size:0.78rem; padding:0.35rem 0; border-bottom:1px solid #21262d; color:#c9d1d9; line-height:1.4;">
+                            <span style="color:${color}; font-weight:bold;">${badge}</span> ${h.title}
+                        </div>`;
+                    }).join('');
+
+                    const overallColor = data.news_sentiment > 0.05 ? '#3fb950'
+                                    : data.news_sentiment < -0.05 ? '#f85149'
+                                    : '#8b949e';
+                    sentimentSummary.innerHTML = `Avg sentiment: <span style="color:${overallColor}; font-weight:bold;">${data.news_sentiment > 0 ? '+' : ''}${data.news_sentiment}</span>`;
+                } else {
+                    headlinesList.innerHTML = '<div style="font-size:0.78rem; color:#484f58;">No headlines found.</div>';
+                    sentimentSummary.innerHTML = '';
+                }
 
                 // Populate info panel
                 const infoRows = document.getElementById('info-rows');

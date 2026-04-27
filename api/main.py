@@ -4,6 +4,7 @@ import yfinance as yf
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from textblob import TextBlob
 
 app = FastAPI()
 
@@ -19,17 +20,16 @@ app.add_middleware(
 def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY"):
     print(f"API called: Running {model} engine for {symbol} over {horizon} day(s)...")
 
-    # 1. Download target symbol and VIX
+    # Download target symbol and VIX
     stock = yf.download(symbol, period='max', progress=False, auto_adjust=True).tail(2500)
     vix = yf.download('^VIX', period='max', progress=False, auto_adjust=True).tail(2500)
 
-    # 2. Clean up MultiIndex columns
+    # Clean up MultiIndex columns
     if isinstance(stock.columns, pd.MultiIndex):
         stock.columns = stock.columns.get_level_values(0)
     if isinstance(vix.columns, pd.MultiIndex):
         vix.columns = vix.columns.get_level_values(0)
 
-    # 3. Inject VIX
     stock['VIX_Close'] = vix['Close']
     stock['VIX_Change'] = vix['Close'].pct_change() * 100
 
@@ -63,14 +63,51 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
     stock['Prev_Close'] = stock['Close'].shift(1)
     stock['Gap_Pct'] = (stock['Open'] - stock['Prev_Close']) / stock['Prev_Close'] * 100
 
+    # --- NEWS + SENTIMENT ---
+    headlines = []
+    news_sentiment = 0.0  # default neutral if fetch fails
+
+    try:
+        ticker_obj = yf.Ticker(symbol)
+        news_items = ticker_obj.news[:5]  # grab top 5 articles
+
+        scores = []
+        for item in news_items:
+            # yfinance news structure: item['content']['title']
+            title = ""
+            if isinstance(item.get('content'), dict):
+                title = item['content'].get('title', '')
+            elif isinstance(item.get('title'), str):
+                title = item['title']
+
+            if title:
+                sentiment = TextBlob(title).sentiment.polarity  # -1 to +1
+                scores.append(sentiment)
+                headlines.append({
+                    "title": title,
+                    "sentiment": round(sentiment, 3)
+                })
+
+        if scores:
+            news_sentiment = round(sum(scores) / len(scores), 4)
+
+    except Exception as e:
+        print(f"News fetch failed: {e}")
+
+    # Inject sentiment as a static column (same value for all rows — today's news)
+    # This is a simplification; it only influences the today_data prediction
+    stock['News_Sentiment'] = 0.0  # neutral for all training rows
     today_data = stock.tail(1).copy()
+    today_data['News_Sentiment'] = news_sentiment  # override with live score for prediction
+
     train_data = stock.dropna().copy()
 
     features = [
         'SMA_50', 'Today_Pct_Change', 'RSI', 'Vol_Change', 'Daily_Range',
         'Dist_From_200', 'MACD', 'Dist_BB_Upper', 'Day_Of_Week',
         'Lag_1', 'Lag_2', 'Gap_Pct',
-        'VIX_Close', 'VIX_Change'
+        'VIX_Close', 'VIX_Change',
+        'News_Sentiment'
     ]
 
     # --- ENGINE SWAP ---
@@ -106,7 +143,6 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
     training_start = train_data.index[0].strftime('%Y-%m-%d')
     training_end = train_data.index[-1].strftime('%Y-%m-%d')
     num_training_rows = len(train_data)
-
     oob_note = round(float(ml_engine.oob_score_) * 100, 1) if model == "rf" else None
 
     return {
@@ -121,5 +157,7 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
         "training_start": training_start,
         "training_end": training_end,
         "oob_score": oob_note,
-        "features_used": len(features)
+        "features_used": len(features),
+        "news_sentiment": news_sentiment,
+        "headlines": headlines
     }
