@@ -15,9 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# NEW: We added `horizon: int = 1` as a URL parameter
 @app.get("/predict")
-def get_prediction(model: str = "linear"):
-    print(f"API called: Running {model} prediction engine...")
+def get_prediction(model: str = "linear", horizon: int = 1):
+    print(f"API called: Running {model} engine for {horizon} day(s)...")
     
     spy = yf.download('SPY', period='max', progress=False, auto_adjust=True)
     spy = spy.tail(2500) 
@@ -28,34 +29,32 @@ def get_prediction(model: str = "linear"):
     # --- FEATURE ENGINEERING ---
     spy['SMA_50'] = spy['Close'].rolling(window=50).mean()
     spy['Today_Pct_Change'] = spy['Close'].pct_change() * 100
-    spy['Target_NextDay_Pct'] = spy['Today_Pct_Change'].shift(-1)
+    
+    # NEW MAGIC: Dynamic Future Target based on Horizon
+    # This calculates the % change from today to 'horizon' days from now
+    spy['Target_Future_Pct'] = spy['Close'].pct_change(periods=horizon).shift(-horizon) * 100
+    
     spy['Vol_Change'] = spy['Volume'].pct_change() * 100
     spy['Daily_Range'] = (spy['High'] - spy['Low']) / spy['Close'] * 100
     spy['SMA_200'] = spy['Close'].rolling(window=200).mean()
     spy['Dist_From_200'] = (spy['Close'] - spy['SMA_200']) / spy['SMA_200'] * 100
 
-    # RSI
     delta = spy['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     spy['RSI'] = 100 - (100 / (1 + rs))
 
-    # MACD 
     ema_12 = spy['Close'].ewm(span=12, adjust=False).mean()
     ema_26 = spy['Close'].ewm(span=26, adjust=False).mean()
     spy['MACD'] = ema_12 - ema_26
     
-    # BBANDS 
     spy['BB_Middle'] = spy['Close'].rolling(window=20).mean()
     spy['BB_Std'] = spy['Close'].rolling(window=20).std()
     spy['BB_Upper'] = spy['BB_Middle'] + (spy['BB_Std'] * 2)
     spy['Dist_BB_Upper'] = (spy['Close'] - spy['BB_Upper']) / spy['BB_Upper'] * 100
     
-    # Day_Of_Week 
     spy['Day_Of_Week'] = spy.index.dayofweek
-
-    # Lagged Returns & Gap
     spy['Lag_1'] = spy['Today_Pct_Change'].shift(1)
     spy['Lag_2'] = spy['Today_Pct_Change'].shift(2)
     spy['Prev_Close'] = spy['Close'].shift(1)
@@ -63,22 +62,22 @@ def get_prediction(model: str = "linear"):
     
     # Clean Data
     today_data = spy.tail(1).copy() 
+    # Because we shift(-horizon), the last 'horizon' rows will be NaN. dropna() cleans them out perfectly!
     train_data = spy.dropna().copy()
     
-    # Updated Features List
     features = [
         'SMA_50', 'Today_Pct_Change', 'RSI', 'Vol_Change', 'Daily_Range', 
         'Dist_From_200', 'MACD', 'Dist_BB_Upper', 'Day_Of_Week', 
         'Lag_1', 'Lag_2', 'Gap_Pct'
     ]
     
-    # --- CLEAN ENGINE SWAP ---
+    # --- ENGINE SWAP ---
     if model == "rf":
         ml_engine = RandomForestRegressor(
             n_estimators=200,      
             random_state=42, 
-            oob_score=True, 
-            max_depth=6,
+            oob_score=True,        
+            max_depth=6,           
             min_samples_leaf=5,    
             max_features="sqrt"    
         )
@@ -86,25 +85,20 @@ def get_prediction(model: str = "linear"):
     else:
         ml_engine = LinearRegression()
         model_name = "Linear Regression"
+        
+    # NOTE: Swapped 'Target_NextDay_Pct' to 'Target_Future_Pct'
+    ml_engine.fit(train_data[features], train_data['Target_Future_Pct'])
     
-    # 1. Train the assigned engine
-    ml_engine.fit(train_data[features], train_data['Target_NextDay_Pct'])
-    
-    # 2. Calculate Reality-Checked Confidence
     if model == "rf":
-        # Use the pop quiz score instead of the memorized score
         r_squared = ml_engine.oob_score_ 
     else:
-        # Linear Regression doesn't have an OOB, but it's so rigid it rarely overfits anyway
-        r_squared = ml_engine.score(train_data[features], train_data['Target_NextDay_Pct'])
+        r_squared = ml_engine.score(train_data[features], train_data['Target_Future_Pct'])
         
-    # 3. Predict tomorrow
     prediction = ml_engine.predict(today_data[features])
     
     pred_val = prediction.item() 
     price_val = today_data['Close'].item()
     
-    # If OOB score is negative (meaning it's worse than just guessing the average), floor it to 0
     final_confidence = max(0, round(float(r_squared) * 100, 1))
     
     return {
@@ -112,5 +106,6 @@ def get_prediction(model: str = "linear"):
         "predicted_change_pct": round(float(pred_val), 3),
         "current_price": round(float(price_val), 2),
         "confidence": final_confidence,
-        "model_used": model_name
+        "model_used": model_name,
+        "horizon_days": horizon
     }
