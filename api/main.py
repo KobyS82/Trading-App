@@ -20,20 +20,24 @@ app.add_middleware(
 def get_prediction(model: str = "linear", horizon: int = 1):
     print(f"API called: Running {model} engine for {horizon} day(s)...")
     
-    spy = yf.download('SPY', period='max', progress=False, auto_adjust=True)
-    spy = spy.tail(2500) 
+    # 1. Download SPY and VIX independently
+    spy = yf.download('SPY', period='max', progress=False, auto_adjust=True).tail(2500)
+    vix = yf.download('^VIX', period='max', progress=False, auto_adjust=True).tail(2500)
     
+    # 2. Clean up MultiIndex columns if Yahoo Finance gets weird
     if isinstance(spy.columns, pd.MultiIndex):
         spy.columns = spy.columns.get_level_values(0)
+    if isinstance(vix.columns, pd.MultiIndex):
+        vix.columns = vix.columns.get_level_values(0)
+        
+    # 3. Inject VIX data into the SPY dataframe
+    spy['VIX_Close'] = vix['Close']
+    spy['VIX_Change'] = vix['Close'].pct_change() * 100
     
     # --- FEATURE ENGINEERING ---
     spy['SMA_50'] = spy['Close'].rolling(window=50).mean()
     spy['Today_Pct_Change'] = spy['Close'].pct_change() * 100
-    
-    # NEW MAGIC: Dynamic Future Target based on Horizon
-    # This calculates the % change from today to 'horizon' days from now
     spy['Target_Future_Pct'] = spy['Close'].pct_change(periods=horizon).shift(-horizon) * 100
-    
     spy['Vol_Change'] = spy['Volume'].pct_change() * 100
     spy['Daily_Range'] = (spy['High'] - spy['Low']) / spy['Close'] * 100
     spy['SMA_200'] = spy['Close'].rolling(window=200).mean()
@@ -60,15 +64,15 @@ def get_prediction(model: str = "linear", horizon: int = 1):
     spy['Prev_Close'] = spy['Close'].shift(1)
     spy['Gap_Pct'] = (spy['Open'] - spy['Prev_Close']) / spy['Prev_Close'] * 100
     
-    # Clean Data
     today_data = spy.tail(1).copy() 
-    # Because we shift(-horizon), the last 'horizon' rows will be NaN. dropna() cleans them out perfectly!
     train_data = spy.dropna().copy()
     
+    # 4. ADD VIX TO THE BRAIN
     features = [
         'SMA_50', 'Today_Pct_Change', 'RSI', 'Vol_Change', 'Daily_Range', 
         'Dist_From_200', 'MACD', 'Dist_BB_Upper', 'Day_Of_Week', 
-        'Lag_1', 'Lag_2', 'Gap_Pct'
+        'Lag_1', 'Lag_2', 'Gap_Pct', 
+        'VIX_Close', 'VIX_Change'  # <--- NEW ALPHA
     ]
     
     # --- ENGINE SWAP ---
