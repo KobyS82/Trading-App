@@ -75,17 +75,18 @@ def get_prediction(model: str = "linear"):
     # --- CLEAN ENGINE SWAP ---
     if model == "rf":
         ml_engine = RandomForestRegressor(
-            n_estimators=100, 
+            n_estimators=200,      
             random_state=42, 
-            oob_score=True,
-            max_depth=5,
-            min_samples_leaf=10
+            oob_score=True, 
+            max_depth=6,
+            min_samples_leaf=5,    
+            max_features="sqrt"    
         )
         model_name = "Random Forest"
     else:
         ml_engine = LinearRegression()
         model_name = "Linear Regression"
-        
+    
     # 1. Train the assigned engine
     ml_engine.fit(train_data[features], train_data['Target_NextDay_Pct'])
     
@@ -94,6 +95,7 @@ def get_prediction(model: str = "linear"):
         # Use the pop quiz score instead of the memorized score
         r_squared = ml_engine.oob_score_ 
     else:
+        # Linear Regression doesn't have an OOB, but it's so rigid it rarely overfits anyway
         r_squared = ml_engine.score(train_data[features], train_data['Target_NextDay_Pct'])
         
     # 3. Predict tomorrow
