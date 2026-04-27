@@ -83,9 +83,18 @@ def get_prediction(model: str = "linear", horizon: int = 1, symbol: str = "SPY")
             if title:
                 sentiment = TextBlob(title).sentiment.polarity  # -1 to +1
                 scores.append(sentiment)
+                link = ""
+                if isinstance(item.get('content'), dict):
+                    # nested content structure
+                    canonical = item['content'].get('canonicalUrl', {})
+                    link = canonical.get('url', '') if isinstance(canonical, dict) else ''
+                elif isinstance(item.get('link'), str):
+                    link = item['link']
+
                 headlines.append({
                     "title": title,
-                    "sentiment": round(sentiment, 3)
+                    "sentiment": round(sentiment, 3),
+                    "url": link
                 })
 
         if scores:
