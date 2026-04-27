@@ -72,6 +72,7 @@
                 
                 // Add the model parameter to the fetch URL
                 const response = await fetch('http://127.0.0.1:8000/predict?model=' + selectedModel);
+                // To pull up the development backend, use: uvicorn api.main:app --reload, into the terminal, and open index.html in the browser.
                 const data = await response.json();
 
                 document.getElementById('symbol').innerText = data.symbol + " Dashboard";

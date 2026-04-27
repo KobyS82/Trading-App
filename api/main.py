@@ -55,7 +55,7 @@ def get_prediction(model: str = "linear"):
     # Day_Of_Week 
     spy['Day_Of_Week'] = spy.index.dayofweek
 
-    # --- NEW: Lagged Returns & Gap ---
+    # Lagged Returns & Gap
     spy['Lag_1'] = spy['Today_Pct_Change'].shift(1)
     spy['Lag_2'] = spy['Today_Pct_Change'].shift(2)
     spy['Prev_Close'] = spy['Close'].shift(1)
@@ -73,26 +73,37 @@ def get_prediction(model: str = "linear"):
     ]
     
     # --- CLEAN ENGINE SWAP ---
-    # We assign the chosen math engine to 'ml_engine' so it doesn't clash with the string 'model'
     if model == "rf":
-        ml_engine = RandomForestRegressor(n_estimators=100, random_state=42)
+        # ADDED: oob_score=True forces the model to take a "pop quiz" on unseen data
+        ml_engine = RandomForestRegressor(n_estimators=100, random_state=42, oob_score=True)
         model_name = "Random Forest"
     else:
         ml_engine = LinearRegression()
         model_name = "Linear Regression"
         
-    # Train, Score, Predict using the assigned engine
+    # 1. Train the assigned engine
     ml_engine.fit(train_data[features], train_data['Target_NextDay_Pct'])
-    r_squared = ml_engine.score(train_data[features], train_data['Target_NextDay_Pct'])
+    
+    # 2. Calculate Reality-Checked Confidence
+    if model == "rf":
+        # Use the pop quiz score instead of the memorized score
+        r_squared = ml_engine.oob_score_ 
+    else:
+        r_squared = ml_engine.score(train_data[features], train_data['Target_NextDay_Pct'])
+        
+    # 3. Predict tomorrow
     prediction = ml_engine.predict(today_data[features])
     
     pred_val = prediction.item() 
     price_val = today_data['Close'].item()
     
+    # If OOB score is negative (meaning it's worse than just guessing the average), floor it to 0
+    final_confidence = max(0, round(float(r_squared) * 100, 1))
+    
     return {
         "symbol": "SPY",
         "predicted_change_pct": round(float(pred_val), 3),
         "current_price": round(float(price_val), 2),
-        "confidence": round(float(r_squared) * 100, 1),
+        "confidence": final_confidence,
         "model_used": model_name
     }
