@@ -15,10 +15,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Notice we added model_type here! It defaults to "linear"
 @app.get("/predict")
-def get_prediction(model_type: str = "linear"):
-    print(f"API called: Running {model_type} prediction engine...")
+def get_prediction(model: str = "linear"):
+    print(f"API called: Running {model} prediction engine...")
     
     spy = yf.download('SPY', period='max', progress=False, auto_adjust=True)
     spy = spy.tail(2500) 
@@ -26,7 +25,7 @@ def get_prediction(model_type: str = "linear"):
     if isinstance(spy.columns, pd.MultiIndex):
         spy.columns = spy.columns.get_level_values(0)
     
-    # Feature Engineering
+    # --- FEATURE ENGINEERING ---
     spy['SMA_50'] = spy['Close'].rolling(window=50).mean()
     spy['Today_Pct_Change'] = spy['Close'].pct_change() * 100
     spy['Target_NextDay_Pct'] = spy['Today_Pct_Change'].shift(-1)
@@ -35,28 +34,57 @@ def get_prediction(model_type: str = "linear"):
     spy['SMA_200'] = spy['Close'].rolling(window=200).mean()
     spy['Dist_From_200'] = (spy['Close'] - spy['SMA_200']) / spy['SMA_200'] * 100
 
+    # RSI
     delta = spy['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / loss
     spy['RSI'] = 100 - (100 / (1 + rs))
+
+    # MACD 
+    ema_12 = spy['Close'].ewm(span=12, adjust=False).mean()
+    ema_26 = spy['Close'].ewm(span=26, adjust=False).mean()
+    spy['MACD'] = ema_12 - ema_26
     
+    # BBANDS 
+    spy['BB_Middle'] = spy['Close'].rolling(window=20).mean()
+    spy['BB_Std'] = spy['Close'].rolling(window=20).std()
+    spy['BB_Upper'] = spy['BB_Middle'] + (spy['BB_Std'] * 2)
+    spy['Dist_BB_Upper'] = (spy['Close'] - spy['BB_Upper']) / spy['BB_Upper'] * 100
+    
+    # Day_Of_Week 
+    spy['Day_Of_Week'] = spy.index.dayofweek
+
+    # --- NEW: Lagged Returns & Gap ---
+    spy['Lag_1'] = spy['Today_Pct_Change'].shift(1)
+    spy['Lag_2'] = spy['Today_Pct_Change'].shift(2)
+    spy['Prev_Close'] = spy['Close'].shift(1)
+    spy['Gap_Pct'] = (spy['Open'] - spy['Prev_Close']) / spy['Prev_Close'] * 100
+    
+    # Clean Data
     today_data = spy.tail(1).copy() 
     train_data = spy.dropna().copy()
     
-    features = ['SMA_50', 'Today_Pct_Change', 'RSI', 'Vol_Change', 'Daily_Range', 'Dist_From_200']
+    # Updated Features List
+    features = [
+        'SMA_50', 'Today_Pct_Change', 'RSI', 'Vol_Change', 'Daily_Range', 
+        'Dist_From_200', 'MACD', 'Dist_BB_Upper', 'Day_Of_Week', 
+        'Lag_1', 'Lag_2', 'Gap_Pct'
+    ]
     
-    # --- SWAP ENGINE BASED ON URL PARAMETER ---
-    if model_type == "rf":
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
+    # --- CLEAN ENGINE SWAP ---
+    # We assign the chosen math engine to 'ml_engine' so it doesn't clash with the string 'model'
+    if model == "rf":
+        ml_engine = RandomForestRegressor(n_estimators=100, random_state=42)
         model_name = "Random Forest"
     else:
-        model = LinearRegression()
+        ml_engine = LinearRegression()
         model_name = "Linear Regression"
         
-    model.fit(train_data[features], train_data['Target_NextDay_Pct'])
-    r_squared = model.score(train_data[features], train_data['Target_NextDay_Pct'])
-    prediction = model.predict(today_data[features])
+    # Train, Score, Predict using the assigned engine
+    ml_engine.fit(train_data[features], train_data['Target_NextDay_Pct'])
+    r_squared = ml_engine.score(train_data[features], train_data['Target_NextDay_Pct'])
+    prediction = ml_engine.predict(today_data[features])
     
     pred_val = prediction.item() 
     price_val = today_data['Close'].item()
