@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import pandas as pd
+import time
 from datetime import date
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
@@ -9,6 +10,11 @@ from lightgbm import LGBMRegressor
 from textblob import TextBlob
 
 app = FastAPI()
+
+# In-memory cache: (symbol, model, horizon) -> (timestamp, response)
+# Prevents the watchlist scanner from re-running expensive ML for every tab load.
+_predict_cache: dict = {}
+_CACHE_TTL_SEC = 30 * 60
 
 app.add_middleware(
     CORSMiddleware,
@@ -113,6 +119,13 @@ def root():
 @app.get("/predict")
 def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     print(f"API called: {model} | {symbol} | {horizon}d")
+
+    # --- CACHE CHECK ---
+    cache_key = (symbol.upper(), model, horizon)
+    cached = _predict_cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < _CACHE_TTL_SEC:
+        print(f"Cache hit: {cache_key}")
+        return cached[1]
 
     # --- DATA DOWNLOAD ---
     stock = yf.download(symbol, period='max', progress=False, auto_adjust=True).tail(2500)
@@ -277,7 +290,7 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     signal_note = None
     if today_earnings or fomc_flag:
         conviction  = "Weak"
-        signal_note = "Near earnings or Fed meeting — elevated uncertainty"
+        signal_note = "Near earnings or Fed meeting: elevated uncertainty"
     elif directional_accuracy and directional_accuracy >= 55 and ml_agreeing == 2:
         conviction = "Strong"
     elif directional_accuracy and directional_accuracy >= 52 and ml_agreeing >= 1:
@@ -292,7 +305,7 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     num_training_rows = len(train_data)
     oob_note          = round(float(ml_engine.oob_score_) * 100, 1) if model == "rf" else None
 
-    return {
+    response = {
         "symbol":               symbol.upper(),
         "current_price":        round(float(price_val), 2),
         "predicted_change_pct": round(float(pred_val), 3),
@@ -329,3 +342,6 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
         # Track record (walk-forward backtested predictions, most recent first)
         "prediction_history": prediction_history[:25],
     }
+
+    _predict_cache[cache_key] = (time.time(), response)
+    return response

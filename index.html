@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Edge — ML Trading Signals</title>
+    <title>Market Edge: ML Trading Signals</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -11,11 +11,81 @@
             background: #0d1117;
             color: #c9d1d9;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start;
             min-height: 100vh;
             padding: 1.5rem 1rem;
+        }
+
+        .app-container {
+            display: flex;
+            gap: 1.5rem;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            max-width: 100%;
+        }
+
+        /* ── SIDE PANEL (Edge Watchlist) ── */
+        .side-panel { width: 280px; flex-shrink: 0; }
+        .side-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 1.25rem;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+        }
+        .side-card h3 {
+            font-size: 1rem; color: #58a6ff;
+            margin-bottom: 0.25rem; font-weight: 700;
+        }
+        .side-desc {
+            font-size: 0.72rem; color: #8b949e; line-height: 1.45;
+            margin-bottom: 0.7rem; padding-bottom: 0.6rem;
+            border-bottom: 1px solid #21262d;
+        }
+        .screener-row {
+            display: grid;
+            grid-template-columns: 3.2rem 3rem 1fr;
+            gap: 0.4rem; align-items: center;
+            padding: 0.45rem 0.4rem;
+            border-bottom: 1px solid #21262d;
+            font-size: 0.78rem; cursor: pointer;
+            border-radius: 4px; transition: background 0.15s;
+        }
+        .screener-row:last-child { border-bottom: none; }
+        .screener-row:hover { background: #21262d; }
+        .screener-row .symbol { font-weight: 700; color: #c9d1d9; }
+        .screener-row .da     { font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; }
+        .screener-row .pred   { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; font-size: 0.74rem; }
+        .screener-row.loading {
+            color: #484f58; cursor: default;
+            grid-template-columns: 3.2rem 1fr;
+        }
+        .screener-row.loading:hover { background: transparent; }
+        .screener-empty {
+            font-size: 0.74rem; color: #484f58;
+            text-align: center; padding: 0.9rem 0.4rem; line-height: 1.45;
+        }
+        .side-footer {
+            margin-top: 0.7rem; padding-top: 0.6rem;
+            border-top: 1px solid #21262d;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 0.5rem; font-size: 0.7rem; color: #484f58;
+        }
+        .scan-btn {
+            background: #21262d; color: #c9d1d9;
+            border: 1px solid #30363d; border-radius: 6px;
+            padding: 0.3rem 0.7rem; font-size: 0.78rem;
+            font-weight: 600; cursor: pointer; white-space: nowrap;
+        }
+        .scan-btn:hover { background: #30363d; }
+        .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        @media (max-width: 880px) {
+            .side-panel { width: 100%; max-width: 520px; }
+        }
+        @media (max-width: 480px) {
+            .app-container { gap: 0; }
+            .side-card { border-radius: 0; border-left: none; border-right: none; }
         }
 
         .card {
@@ -268,6 +338,7 @@
     </style>
 </head>
 <body>
+<div class="app-container">
 <div class="card">
 
     <!-- HEADER -->
@@ -288,12 +359,12 @@
             <button class="go-btn" onclick="getPrediction()">Go</button>
         </div>
         <div class="select-row">
-            <select id="model-select" onchange="getPrediction()">
+            <select id="model-select" onchange="onControlChange()">
                 <option value="linear">Linear Regression</option>
                 <option value="rf">Random Forest</option>
                 <option value="lgb" selected>LightGBM (Best)</option>
             </select>
-            <select id="horizon-select" onchange="getPrediction()"></select>
+            <select id="horizon-select" onchange="onControlChange()"></select>
         </div>
     </div>
 
@@ -359,8 +430,8 @@
 
     <div class="divider"></div>
 
-    <!-- TRACK RECORD (collapsible, open by default — this is the credibility proof) -->
-    <details class="section-collapse" open>
+    <!-- TRACK RECORD (collapsible, closed by default to keep the page tidy) -->
+    <details class="section-collapse">
         <summary style="color:#58a6ff;">
             <span class="s-arrow">▶</span> Recent Predictions vs Actuals
         </summary>
@@ -398,13 +469,28 @@
 
     <!-- FOOTNOTES -->
     <div class="footnotes">
-        <p><strong>Directional Accuracy</strong> — walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon. The "Recent Predictions vs Actuals" panel above shows the last 25 of those backtested predictions with their realized outcomes — so you can verify, not just trust, the headline number.</p>
-        <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only — Linear Regression is excluded from conviction scoring because it is too simple to reliably capture price dynamics. Weak conviction is forced near earnings or Fed meetings regardless of accuracy.</p>
-        <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment — display only, not trained into the model). <strong>VIX &gt; 20</strong> = elevated volatility / inflated options premiums.</p>
-        <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders — not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
+        <p><strong>Directional Accuracy:</strong> walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon. The "Recent Predictions vs Actuals" panel above shows the last 25 of those backtested predictions with their realized outcomes, so you can verify rather than trust the headline number.</p>
+        <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only. Linear Regression is excluded from conviction scoring because it is too simple to reliably capture price dynamics. Weak conviction is forced near earnings or Fed meetings regardless of accuracy.</p>
+        <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only, not trained into the model). <strong>VIX &gt; 20</strong> = elevated volatility / inflated options premiums.</p>
+        <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders, not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
     </div>
 
 </div>
+
+<!-- EDGE WATCHLIST (side panel) -->
+<aside class="side-panel">
+    <div class="side-card">
+        <h3>Edge Watchlist</h3>
+        <div class="side-desc">Popular tickers where the model has 55%+ directional accuracy on the current model and horizon. Click a row to load it in the main panel.</div>
+        <div id="screener-list"></div>
+        <div class="side-footer">
+            <button id="scan-btn" class="scan-btn" onclick="scanScreener(true)">↻ Scan</button>
+            <span id="screener-status"></span>
+        </div>
+    </div>
+</aside>
+
+</div><!-- /app-container -->
 
 <script>
 const POPULAR_TICKERS = [
@@ -600,13 +686,13 @@ function populateHorizons() {
     const nextEowTD  = tradingDaysAhead(daysToFri + 7);
 
     [
-        { value: 1,        label: 'Tomorrow — 1 DTE' },
+        { value: 1,        label: 'Tomorrow (1 DTE)' },
         { value: 3,        label: '3 Days' },
-        { value: eowTD,    label: `End of Week — ${eowTD} DTE` },
-        { value: nextEowTD,label: `Next Week — ${nextEowTD} DTE` },
-        { value: 21,       label: 'Monthly — 21 DTE (Std Options)' },
-        { value: 42,       label: '2 Months — 42 DTE' },
-        { value: 63,       label: 'Quarterly — 63 DTE' },
+        { value: eowTD,    label: `End of Week (${eowTD} DTE)` },
+        { value: nextEowTD,label: `Next Week (${nextEowTD} DTE)` },
+        { value: 21,       label: 'Monthly (21 DTE, Std Options)' },
+        { value: 42,       label: '2 Months (42 DTE)' },
+        { value: 63,       label: 'Quarterly (63 DTE)' },
     ].forEach(opt => {
         if (opt.value > 0) {
             const el = document.createElement('option');
@@ -787,7 +873,7 @@ async function getPrediction() {
             trackSummary.innerHTML =
                 `<strong>${hits}/${shown} correct (${recentPct}%)</strong> on the last ${shown} backtested predictions · `
               + `Full ${total}-sample DA shown in gauge above. `
-              + `Each prediction was made using <em>only</em> the data available before its date — no peeking.`;
+              + `Each prediction was made using <em>only</em> the data available before its date. No peeking.`;
 
             trackList.innerHTML = data.prediction_history.map(h => {
                 const checkColor = h.correct ? '#3fb950' : '#f85149';
@@ -856,9 +942,169 @@ async function getPrediction() {
     }
 }
 
+// ── EDGE WATCHLIST SCREENER ───────────────────────────────
+const SCREENER_TICKERS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META'];
+const SCREENER_LS_TTL  = 60 * 60 * 1000; // 1 hour client-side TTL
+let _screenerScanning = false;
+let _screenerResults  = [];
+
+function _screenerKey() {
+    const m = document.getElementById('model-select').value;
+    const h = document.getElementById('horizon-select').value;
+    return `screener_v1_${m}_${h}`;
+}
+
+function loadScreenerFromCache() {
+    try {
+        const raw = localStorage.getItem(_screenerKey());
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (Date.now() - obj.timestamp > SCREENER_LS_TTL) return null;
+        return obj;
+    } catch { return null; }
+}
+
+function saveScreenerToCache(results) {
+    try {
+        localStorage.setItem(_screenerKey(), JSON.stringify({ timestamp: Date.now(), results }));
+    } catch {}
+}
+
+function renderScreener() {
+    const container = document.getElementById('screener-list');
+    const status    = document.getElementById('screener-status');
+    const scanBtn   = document.getElementById('scan-btn');
+
+    const filtered = _screenerResults
+        .filter(r => r.da != null && r.da >= 55)
+        .sort((a, b) => b.da - a.da);
+
+    if (filtered.length === 0) {
+        if (_screenerScanning && _screenerResults.length === 0) {
+            container.innerHTML = '<div class="screener-empty">Scanning watchlist... can take a minute.</div>';
+        } else if (_screenerScanning) {
+            container.innerHTML = '<div class="screener-empty">No 55%+ stocks in results so far. Still scanning.</div>';
+        } else if (_screenerResults.length === 0) {
+            container.innerHTML = '<div class="screener-empty">No data yet. Click Scan to populate.</div>';
+        } else {
+            container.innerHTML = '<div class="screener-empty">No 55%+ DA tickers on this horizon. Try a different horizon.</div>';
+        }
+    } else {
+        container.innerHTML = filtered.map(r => {
+            const dirColor = r.pct >= 0 ? '#3fb950' : '#f85149';
+            const dirIcon  = r.pct >= 0 ? '▲' : '▼';
+            const daColor  = r.da  >= 60 ? '#3fb950' : '#d29922';
+            const sign     = r.pct >= 0 ? '+' : '';
+            return `<div class="screener-row" onclick="loadFromScreener('${r.symbol}')">
+                <span class="symbol">${r.symbol}</span>
+                <span class="da" style="color:${daColor};">${r.da}%</span>
+                <span class="pred" style="color:${dirColor};">${dirIcon} ${sign}${r.pct}%</span>
+            </div>`;
+        }).join('');
+    }
+
+    if (_screenerScanning) {
+        status.textContent = `${_screenerResults.length}/${SCREENER_TICKERS.length}`;
+        scanBtn.disabled = true;
+    } else {
+        scanBtn.disabled = false;
+        const cached = loadScreenerFromCache();
+        if (cached) {
+            const min = Math.round((Date.now() - cached.timestamp) / 60000);
+            status.textContent = min < 1 ? 'just now' : `${min} min ago`;
+        } else {
+            status.textContent = '';
+        }
+    }
+}
+
+async function scanScreener(force = false) {
+    if (_screenerScanning) return;
+
+    if (!force) {
+        const cached = loadScreenerFromCache();
+        if (cached) {
+            _screenerResults = cached.results;
+            renderScreener();
+            return;
+        }
+    }
+
+    _screenerScanning = true;
+    _screenerResults  = [];
+    renderScreener();
+
+    const PROD_API = 'https://trading-app-api-3d6f.onrender.com';
+    const isLocal  = ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+                  || window.location.protocol === 'file:';
+    const baseUrl  = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
+    // Pin model/horizon to the scan-start values so a mid-scan setting change
+    // doesn't poison the cache or mislabel results.
+    const scanModel   = document.getElementById('model-select').value;
+    const scanHorizon = document.getElementById('horizon-select').value;
+    const scanKey     = `screener_v1_${scanModel}_${scanHorizon}`;
+
+    const localResults = [];
+    const queue = [...SCREENER_TICKERS];
+
+    async function worker() {
+        while (queue.length > 0) {
+            const symbol = queue.shift();
+            if (!symbol) break;
+            let row;
+            try {
+                const res  = await fetch(`${baseUrl}/predict?symbol=${symbol}&model=${scanModel}&horizon=${scanHorizon}`);
+                const data = await res.json();
+                row = { symbol, da: data.directional_accuracy, pct: data.predicted_change_pct };
+            } catch {
+                row = { symbol, da: null, pct: null };
+            }
+            localResults.push(row);
+            // Live-update the panel only if the user is still viewing this scan's settings
+            if (_screenerKey() === scanKey) {
+                _screenerResults = [...localResults];
+                renderScreener();
+            }
+        }
+    }
+
+    // 2 in flight at a time. Render free tier struggles with more.
+    await Promise.all([worker(), worker()]);
+
+    _screenerScanning = false;
+    // Always persist under the scan's own key, even if user changed settings
+    try {
+        localStorage.setItem(scanKey, JSON.stringify({ timestamp: Date.now(), results: localResults }));
+    } catch {}
+    if (_screenerKey() === scanKey) renderScreener();
+}
+
+function loadFromScreener(symbol) {
+    document.getElementById('symbol-input').value = symbol;
+    getPrediction();
+}
+
+// Wraps the model/horizon onchange so both panels stay in sync
+function onControlChange() {
+    getPrediction();
+    const cached = loadScreenerFromCache();
+    _screenerResults = cached ? cached.results : [];
+    renderScreener();
+}
+
+// ── INIT ──────────────────────────────────────────────────
 populateHorizons();
 initTickerAutocomplete();
 getPrediction();
+
+// Screener: prefer cache; otherwise auto-scan in the background
+const _initCached = loadScreenerFromCache();
+if (_initCached) {
+    _screenerResults = _initCached.results;
+    renderScreener();
+} else {
+    scanScreener();
+}
 </script>
 </body>
 </html>
