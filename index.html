@@ -70,6 +70,19 @@
                 
                 const predEl = document.getElementById('prediction-text');
                 const pct = data.predicted_change_pct;
+
+                const confEl = document.getElementById('conf-val'); 
+                if(confEl) {
+                    confEl.innerText = data.confidence + "%";
+                } else {
+                    const newConfEl = document.createElement('div');
+                    newConfEl.id = 'conf-val';
+                    newConfEl.style.marginTop = '0.5rem';
+                    newConfEl.style.fontSize = '0.9rem';
+                    newConfEl.style.color = '#8b949e';
+                    newConfEl.innerText = "Confidence: " + data.confidence + "%";
+                    document.getElementById('prediction-container').appendChild(newConfEl);
+                }
                 
                 // Visual feedback: Green for Up, Red for Down
                 if (pct >= 0) {

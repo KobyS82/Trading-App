@@ -24,7 +24,6 @@ def get_prediction():
     # 1. Pull data
     spy = yf.download('SPY', period='1y', progress=False, auto_adjust=True)
     
-    # --- ADD THIS LINE TO FIX THE MULTIINDEX ---
     # This flattens the columns so 'Close' is just a simple string again
     if isinstance(spy.columns, pd.MultiIndex):
         spy.columns = spy.columns.get_level_values(0)
@@ -50,6 +49,9 @@ def get_prediction():
     model = LinearRegression()
     model.fit(train_data[features], train_data['Target_NextDay_Pct'])
     
+    # This returns a value between 0 and 1
+    r_squared = model.score(train_data[features], train_data['Target_NextDay_Pct'])
+
     # 4. Predict
     prediction = model.predict(today_data[features])
     
@@ -62,5 +64,6 @@ def get_prediction():
     return {
         "symbol": "SPY",
         "predicted_change_pct": round(float(pred_val), 3),
-        "current_price": round(float(price_val), 2)
+        "current_price": round(float(price_val), 2),
+        "confidence": round(float(r_squared) * 100, 1)
     }
