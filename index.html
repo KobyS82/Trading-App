@@ -51,6 +51,12 @@
 
     <div class="card">
         <h1 id="symbol">Loading...</h1>
+        
+        <select id="model-select" onchange="getPrediction()" style="margin-bottom: 1rem; padding: 0.5rem; background: #0d1117; color: white; border: 1px solid #30363d; border-radius: 4px; width: 100%; font-weight: bold;">
+            <option value="linear">Model: Linear Regression (Calc 3)</option>
+            <option value="rf">Model: Random Forest (Advanced)</option>
+        </select>
+
         <div class="price" id="price">--</div>
         <div id="prediction-container">
             <span id="prediction-text">Predicting movement...</span>
@@ -61,10 +67,11 @@
     <script>
         async function getPrediction() {
             try {
-                // This calls your FastAPI backend!
-                const response = await fetch('/predict');
-                // USE '/predict' when pushing to Vercel. Local testing you will need 'http://127.0.0.1:8000/predict'
-                // const response = await fetch('http://127.0.0.1:8000/predict');
+                // Grab the current value of the dropdown
+                const selectedModel = document.getElementById('model-select').value;
+                
+                // Add the model parameter to the fetch URL
+                const response = await fetch('http://127.0.0.1:8000/predict?model=' + selectedModel);
                 const data = await response.json();
 
                 document.getElementById('symbol').innerText = data.symbol + " Dashboard";
@@ -72,7 +79,16 @@
                 
                 const predEl = document.getElementById('prediction-text');
                 const pct = data.predicted_change_pct;
+                
+                if (pct >= 0) {
+                    predEl.innerText = "Tomorrow: +" + pct + "%";
+                    predEl.className = "prediction up";
+                } else {
+                    predEl.innerText = "Tomorrow: " + pct + "%";
+                    predEl.className = "prediction down";
+                }
 
+                // Confidence Logic
                 const confEl = document.getElementById('conf-val'); 
                 if(confEl) {
                     confEl.innerText = "Confidence: " + data.confidence + "%";
@@ -85,22 +101,12 @@
                     newConfEl.innerText = "Confidence: " + data.confidence + "%";
                     document.getElementById('prediction-container').appendChild(newConfEl);
                 }
-                
-                // Visual feedback: Green for Up, Red for Down
-                if (pct >= 0) {
-                    predEl.innerText = "Tomorrow: +" + pct + "%";
-                    predEl.className = "prediction up";
-                } else {
-                    predEl.innerText = "Tomorrow: " + pct + "%";
-                    predEl.className = "prediction down";
-                }
             } catch (error) {
                 console.error("Error fetching prediction:", error);
                 document.getElementById('symbol').innerText = "Backend Offline";
             }
         }
 
-        // Run once on load
         getPrediction();
     </script>
 </body>
