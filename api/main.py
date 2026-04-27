@@ -74,8 +74,13 @@ def get_prediction(model: str = "linear"):
     
     # --- CLEAN ENGINE SWAP ---
     if model == "rf":
-        # ADDED: oob_score=True forces the model to take a "pop quiz" on unseen data
-        ml_engine = RandomForestRegressor(n_estimators=100, random_state=42, oob_score=True)
+        ml_engine = RandomForestRegressor(
+            n_estimators=100, 
+            random_state=42, 
+            oob_score=True,
+            max_depth=5,
+            min_samples_leaf=10
+        )
         model_name = "Random Forest"
     else:
         ml_engine = LinearRegression()
