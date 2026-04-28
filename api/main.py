@@ -173,8 +173,9 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     stock['Ret_10d'] = stock['Close'].pct_change(10) * 100
     stock['Ret_20d'] = stock['Close'].pct_change(20) * 100
 
-    # --- EARNINGS PROXIMITY FLAG (historical) ---
+    # --- EARNINGS PROXIMITY FLAG (historical) + NEXT EARNINGS DATE ---
     stock['Earnings_Flag'] = 0
+    next_earnings = None
     ticker_obj = yf.Ticker(symbol)
     try:
         edates = ticker_obj.earnings_dates
@@ -182,10 +183,16 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
             # Normalize both sides to tz-naive date for comparison
             idx = stock.index
             idx_naive = idx.tz_localize(None) if idx.tz is not None else idx
+            today_naive = pd.Timestamp.today().normalize()
+            future_edates = []
             for edate in edates.index:
                 e = pd.Timestamp(edate).tz_localize(None) if pd.Timestamp(edate).tz is not None else pd.Timestamp(edate)
                 mask = (idx_naive >= e - pd.Timedelta(days=5)) & (idx_naive <= e + pd.Timedelta(days=2))
                 stock.loc[mask, 'Earnings_Flag'] = 1
+                if e.normalize() > today_naive:
+                    future_edates.append(e)
+            if future_edates:
+                next_earnings = min(future_edates).strftime('%Y-%m-%d')
     except Exception as ex:
         print(f"Earnings flag failed: {ex}")
 
@@ -213,8 +220,9 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     except Exception as ex:
         print(f"News fetch failed: {ex}")
 
-    # --- PUT/CALL RATIO (nearest expiry, display only) ---
+    # --- PUT/CALL RATIO + IMPLIED VOLATILITY (nearest expiry, display only) ---
     put_call_ratio = None
+    implied_vol    = None
     try:
         opts = ticker_obj.options
         if opts:
@@ -223,6 +231,17 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
             call_vol = chain.calls['volume'].fillna(0).sum()
             if call_vol > 0:
                 put_call_ratio = round(float(put_vol / call_vol), 2)
+            # ATM implied volatility — average of nearest call + put strike to current price
+            cur_price = float(stock['Close'].iloc[-1])
+            ivs = []
+            for chain_side in [chain.calls, chain.puts]:
+                if not chain_side.empty and 'impliedVolatility' in chain_side.columns:
+                    pos = int((chain_side['strike'] - cur_price).abs().argsort().iloc[0])
+                    iv  = chain_side.iloc[pos]['impliedVolatility']
+                    if pd.notna(iv) and iv > 0:
+                        ivs.append(float(iv))
+            if ivs:
+                implied_vol = round(sum(ivs) / len(ivs) * 100, 1)
     except Exception as ex:
         print(f"P/C ratio failed: {ex}")
 
@@ -335,6 +354,8 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
         "features_used":        len(features),
         "news_sentiment":       news_sentiment,
         "headlines":            headlines,
+        "implied_vol":          implied_vol,
+        "next_earnings":        next_earnings,
         # Market context (for UI display)
         "vix_close": round(float(today_data['VIX_Close'].item()), 2) if pd.notna(today_data['VIX_Close'].item()) else None,
         "rsi":       round(float(today_data['RSI'].item()),       1) if pd.notna(today_data['RSI'].item())       else None,

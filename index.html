@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Market Edge: ML Trading Signals</title>
+    <title>WalkForwardEdge — ML Trading Signals</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -357,6 +357,41 @@
         .info-label { color: #8b949e; }
         .info-value { color: #c9d1d9; font-weight: 700; }
 
+        /* ── HERO BANNER ── */
+        .hero-banner {
+            max-width: 980px;
+            margin: 0 auto 1.25rem;
+            padding: 0.65rem 1.1rem;
+            background: rgba(88,166,255,0.06);
+            border: 1px solid rgba(88,166,255,0.18);
+            border-radius: 8px;
+            font-size: 0.79rem;
+            color: #8b949e;
+            line-height: 1.55;
+        }
+        .hero-name {
+            font-weight: 700;
+            color: #58a6ff;
+            font-size: 0.85rem;
+            letter-spacing: 0.02em;
+        }
+        .hero-sep { color: #30363d; margin: 0 0.4rem; }
+
+        /* ── BROKER LINKS ── */
+        .broker-links {
+            display: flex; gap: 0.45rem; justify-content: center;
+            flex-wrap: wrap; margin: 0.5rem 0 0.2rem;
+        }
+        .broker-link {
+            font-size: 0.72rem; color: #8b949e;
+            border: 1px solid #30363d; border-radius: 4px;
+            padding: 0.18rem 0.55rem;
+            text-decoration: none; font-weight: 600;
+            transition: border-color 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .broker-link:hover { color: #c9d1d9; border-color: #58a6ff; }
+
         /* ── FOOTNOTES ── */
         .footnotes {
             margin-top: 1rem; font-size: 0.72rem; color: #484f58; line-height: 1.5;
@@ -375,6 +410,12 @@
     </style>
 </head>
 <body>
+<div class="hero-banner">
+    <span class="hero-name">WalkForwardEdge</span><span class="hero-sep">·</span>
+    ML trading signals backed by walk-forward backtesting on data the model never saw.
+    Directional Accuracy is computed across 3 rolling out-of-sample windows (~240 samples) — not cherry-picked backtests.
+    Every prediction is logged with its realized outcome so you can verify, not just trust.
+</div>
 <div class="app-container">
 
 <!-- EDGE WATCHLIST — left sidebar, sticky -->
@@ -395,7 +436,7 @@
 
     <!-- HEADER -->
     <div class="card-header">
-        <h1 id="symbol-title">Market Edge</h1>
+        <h1 id="symbol-title">WalkForwardEdge</h1>
         <div id="ticker-desc" class="ticker-desc"></div>
         <div id="last-updated" class="last-updated"></div>
     </div>
@@ -449,6 +490,9 @@
         <span id="signal-badge" class="signal-badge"></span>
         <span id="conviction-badge" class="conviction-badge"></span>
     </div>
+
+    <!-- BROKER LINKS -->
+    <div id="broker-links" class="broker-links"></div>
 
     <!-- MODEL CONSENSUS -->
     <div id="consensus-display" class="consensus-display"></div>
@@ -523,7 +567,7 @@
     <div class="footnotes">
         <p><strong>Directional Accuracy:</strong> walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon. The "Recent Predictions vs Actuals" panel above shows the last 25 of those backtested predictions with their realized outcomes, so you can verify rather than trust the headline number.</p>
         <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only. Linear Regression is excluded from conviction scoring because it is too simple to reliably capture price dynamics. Weak conviction is forced near earnings or Fed meetings regardless of accuracy.</p>
-        <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only, not trained into the model). <strong>VIX &gt; 20</strong> = elevated volatility / inflated options premiums.</p>
+        <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only). <strong>IV</strong> = per-ticker ATM implied volatility from the nearest expiry options chain. <strong>Mkt VIX &gt; 20</strong> = elevated S&P 500 market-wide volatility / inflated options premiums across the board.</p>
         <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders, not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
     </div>
 
@@ -781,6 +825,7 @@ async function getPrediction() {
     document.getElementById('prediction-text').className  = 'prediction flat';
     document.getElementById('signal-badge').textContent   = '';
     document.getElementById('conviction-badge').textContent = '';
+    document.getElementById('broker-links').innerHTML       = '';
     document.getElementById('consensus-display').innerHTML = '';
     document.getElementById('context-display').innerHTML   = '';
     document.getElementById('tech-display').innerHTML      = '';
@@ -798,6 +843,7 @@ async function getPrediction() {
         const isLocal   = ['127.0.0.1', 'localhost'].includes(window.location.hostname)
                        || window.location.protocol === 'file:';
         const baseUrl   = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
+        // If local dev, use "uvicorn api.main:app --reload" in terminal
 
         const res  = await fetch(`${baseUrl}/predict?model=${model}&horizon=${horizon}&symbol=${symbol}`);
         const data = await res.json();
@@ -867,11 +913,18 @@ async function getPrediction() {
             ctxParts.push(`<span>P/C: <span style="color:${pcColor}; font-weight:700;">${pc}</span> <span style="color:#484f58; font-size:0.75rem;">${pcLabel}</span></span>`);
         }
 
+        if (data.implied_vol != null) {
+            const iv      = data.implied_vol;
+            const ivColor = iv > 60 ? '#f85149' : iv > 30 ? '#d29922' : '#8b949e';
+            const ivLabel = iv > 60 ? 'High' : iv > 30 ? 'Elevated' : 'Normal';
+            ctxParts.push(`<span>IV: <span style="color:${ivColor}; font-weight:700;">${iv}%</span> <span style="color:#484f58; font-size:0.75rem;">${ivLabel}</span></span>`);
+        }
+
         if (data.vix_close != null) {
             const vix      = data.vix_close;
             const vixColor = vix > 30 ? '#f85149' : vix > 20 ? '#d29922' : '#3fb950';
             const vixLabel = vix > 30 ? 'High Fear' : vix > 20 ? 'Elevated' : 'Low';
-            ctxParts.push(`<span>VIX: <span style="color:${vixColor}; font-weight:700;">${vix}</span> <span style="color:#484f58; font-size:0.75rem;">${vixLabel}</span></span>`);
+            ctxParts.push(`<span title="S&P 500 market-wide implied volatility index">Mkt VIX: <span style="color:${vixColor}; font-weight:700;">${vix}</span> <span style="color:#484f58; font-size:0.75rem;">${vixLabel}</span></span>`);
         }
 
         ctxEl.innerHTML = ctxParts.join('<span style="color:#30363d;"> · </span>');
@@ -892,7 +945,18 @@ async function getPrediction() {
             techParts.push(`<span>MACD: <span style="color:${macdColor}; font-weight:700;">${macdSign}${data.macd}</span></span>`);
         }
 
+        if (data.next_earnings) {
+            techParts.push(`<span>Next Earnings: <span style="color:#d29922; font-weight:700;">${data.next_earnings}</span></span>`);
+        }
+
         techEl.innerHTML = techParts.join('<span style="color:#30363d;"> · </span>');
+
+        // ── Broker deep links ──
+        document.getElementById('broker-links').innerHTML =
+            `<a class="broker-link" href="https://robinhood.com/stocks/${symbol}" target="_blank" rel="noopener noreferrer">Robinhood ↗</a>` +
+            `<a class="broker-link" href="https://www.webull.com/quote/${symbol}" target="_blank" rel="noopener noreferrer">Webull ↗</a>` +
+            `<a class="broker-link" href="https://www.tradingview.com/chart/?symbol=${symbol}" target="_blank" rel="noopener noreferrer">TradingView ↗</a>` +
+            `<a class="broker-link" href="https://finance.yahoo.com/quote/${symbol}" target="_blank" rel="noopener noreferrer">Yahoo Finance ↗</a>`;
 
         // ── Warnings ──
         const warnEl   = document.getElementById('warning-display');
@@ -962,15 +1026,17 @@ async function getPrediction() {
         const rsiLine  = data.rsi  != null ? `<div class="info-row"><span class="info-label">RSI (14)</span><span class="info-value">${data.rsi}</span></div>` : '';
         const macdLine = data.macd != null ? `<div class="info-row"><span class="info-label">MACD</span><span class="info-value">${data.macd}</span></div>` : '';
         const vixLine  = data.vix_close != null ? `<div class="info-row"><span class="info-label">VIX</span><span class="info-value">${data.vix_close}</span></div>` : '';
-        const oobLine  = data.oob_score != null ? `<div class="info-row"><span class="info-label">OOB Score</span><span class="info-value">${data.oob_score}%</span></div>` : '';
-        const fitLine  = data.fit_score != null ? `<div class="info-row"><span class="info-label">In-Sample Fit (R²)</span><span class="info-value">${data.fit_score}%</span></div>` : '';
+        const oobLine  = data.oob_score   != null ? `<div class="info-row"><span class="info-label">OOB Score</span><span class="info-value">${data.oob_score}%</span></div>` : '';
+        const fitLine  = data.fit_score   != null ? `<div class="info-row"><span class="info-label">In-Sample Fit (R²)</span><span class="info-value">${data.fit_score}%</span></div>` : '';
+        const ivLine   = data.implied_vol != null ? `<div class="info-row"><span class="info-label">Implied Vol ATM</span><span class="info-value">${data.implied_vol}%</span></div>` : '';
+        const earnLine = data.next_earnings ? `<div class="info-row"><span class="info-label">Next Earnings</span><span class="info-value">${data.next_earnings}</span></div>` : '';
 
         infoRows.innerHTML = `
             <div class="info-row"><span class="info-label">Model</span><span class="info-value">${data.model_used}</span></div>
             <div class="info-row"><span class="info-label">Training Rows</span><span class="info-value">${data.training_rows.toLocaleString()} days</span></div>
             <div class="info-row"><span class="info-label">Data Range</span><span class="info-value">${data.training_start} → ${data.training_end}</span></div>
             <div class="info-row"><span class="info-label">Features Used</span><span class="info-value">${data.features_used}</span></div>
-            ${rsiLine}${macdLine}${vixLine}${fitLine}${oobLine}
+            ${rsiLine}${macdLine}${vixLine}${ivLine}${earnLine}${fitLine}${oobLine}
         `;
 
     } catch (err) {
