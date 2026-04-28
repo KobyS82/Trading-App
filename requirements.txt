@@ -6,3 +6,4 @@ scikit-learn
 lightgbm
 textblob
 httpx
+python-dotenv

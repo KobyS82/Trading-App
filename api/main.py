@@ -1,5 +1,6 @@
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
 import yfinance as yf
 import pandas as pd
 import httpx
@@ -12,11 +13,13 @@ from sklearn.ensemble import RandomForestRegressor
 from lightgbm import LGBMRegressor
 from textblob import TextBlob
 
+load_dotenv()  # loads .env on local dev; no-op on Render (uses dashboard env vars)
+
 app = FastAPI()
 
 # ── SUPABASE CONFIG ──────────────────────────────────────────────────────────
-# Set these env vars in Render dashboard. The app works fine without them —
-# logging is a silent no-op when they're absent.
+# Set SUPABASE_URL and SUPABASE_ANON_KEY in .env locally, Render dashboard in prod.
+# Use the Legacy Anon JWT key (eyJ...) — NOT the secret key, which bypasses all RLS.
 SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
 SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
 
