@@ -53,6 +53,9 @@ def build_model(name: str):
     return LinearRegression(), "Linear Regression"
 
 
+_ROLLING_TRAIN_WINDOW = 1000  # ~4 years; keeps the model in the current regime
+
+
 def walk_forward_directional_accuracy(train_data, features, target_col, model_name,
                                       n_windows=3, test_size=80):
     correct = 0
@@ -64,7 +67,7 @@ def walk_forward_directional_accuracy(train_data, features, target_col, model_na
         start_idx = end_idx - test_size
         if start_idx < 250:
             break
-        train = train_data.iloc[:start_idx]
+        train = train_data.iloc[max(0, start_idx - _ROLLING_TRAIN_WINDOW):start_idx]
         test  = train_data.iloc[start_idx:end_idx]
         m, _ = build_model(model_name)
         m.fit(train[features], train[target_col])
@@ -172,6 +175,11 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     stock['Ret_5d']  = stock['Close'].pct_change(5)  * 100
     stock['Ret_10d'] = stock['Close'].pct_change(10) * 100
     stock['Ret_20d'] = stock['Close'].pct_change(20) * 100
+    stock['Ret_63d'] = stock['Close'].pct_change(63) * 100  # quarterly — regime context
+
+    # Regime indicators (help at longer horizons like 21+ DTE)
+    stock['Vol_20d']   = stock['Today_Pct_Change'].rolling(20).std()  # realized vol regime
+    stock['Above_200'] = (stock['Close'] > stock['SMA_200']).astype(int)  # bull/bear regime
 
     # --- EARNINGS PROXIMITY FLAG (historical) + NEXT EARNINGS DATE ---
     stock['Earnings_Flag'] = 0
@@ -261,7 +269,8 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
         'Dist_From_200', 'MACD', 'Dist_BB_Upper', 'Day_Of_Week',
         'Lag_1', 'Lag_2', 'Gap_Pct',
         'VIX_Close', 'VIX_Change',
-        'Ret_5d', 'Ret_10d', 'Ret_20d',
+        'Ret_5d', 'Ret_10d', 'Ret_20d', 'Ret_63d',
+        'Vol_20d', 'Above_200',
         'Earnings_Flag',
         'News_Sentiment',
     ]

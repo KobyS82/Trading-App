@@ -133,6 +133,7 @@
             min-width: 0;
             max-width: 640px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+            position: relative;
         }
 
         /* ── HEADER ── */
@@ -190,15 +191,18 @@
         }
         .ticker-dropdown li:hover, .ticker-dropdown li.active { background: #21262d; }
 
-        /* ── PROGRESS BAR ── */
-        .progress-container { margin: 0.4rem 0 0.7rem; }
-        .progress-track { height: 3px; background: #21262d; border-radius: 2px; overflow: hidden; }
+        /* ── PROGRESS BAR (top-of-card overlay — no layout shift) ── */
+        .progress-container {
+            position: absolute; top: 0; left: 0; right: 0;
+            height: 3px; margin: 0; z-index: 10;
+            border-radius: 12px 12px 0 0; overflow: hidden;
+        }
+        .progress-track { height: 3px; background: rgba(33,38,45,0.6); }
         .progress-fill {
             height: 100%; width: 0%;
             background: linear-gradient(90deg, #238636, #58a6ff);
-            border-radius: 2px; transition: width 0.85s ease;
+            transition: width 0.85s ease;
         }
-        .progress-label { font-size: 0.7rem; color: #8b949e; text-align: center; margin-top: 0.3rem; }
 
         /* ── PRICE SECTION ── */
         .price-section {
@@ -410,7 +414,7 @@
 <body>
 <div class="hero-banner">
     <span class="hero-name">WalkForwardEdge</span><span class="hero-sep">|</span>
-    Walk-forward backtested ML signals with auditable directional accuracy. No cherry-picked backtests.
+    Walk-forward backtested Machine Learning signals with auditable directional accuracy. No cherry-picked backtests.
 </div>
 <div class="app-container">
 
@@ -458,10 +462,9 @@
         </div>
     </div>
 
-    <!-- PROGRESS BAR -->
+    <!-- PROGRESS BAR — absolute top-of-card overlay, no layout shift -->
     <div id="progress-container" class="progress-container" style="display:none">
         <div class="progress-track"><div id="progress-fill" class="progress-fill"></div></div>
-        <div id="progress-label" class="progress-label">Connecting...</div>
     </div>
 
     <!-- PRICE → TARGET -->
@@ -560,7 +563,7 @@
     <!-- FOOTNOTES -->
     <div class="footnotes">
         <p><strong>Directional Accuracy:</strong> walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon. The "Recent Predictions vs Actuals" panel above shows the last 25 of those backtested predictions with their realized outcomes, so you can verify rather than trust the headline number.</p>
-        <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only. Linear Regression is excluded from conviction scoring because it is too simple to reliably capture price dynamics. Weak conviction is forced near earnings or Fed meetings regardless of accuracy.</p>
+        <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only. Linear Regression is excluded because it is too simple to capture price dynamics reliably. Weak conviction is forced near earnings or Fed meetings regardless of accuracy. These are the two Machine Learning (ML) models; Linear Regression is a statistical baseline.</p>
         <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only). <strong>IV</strong> = per-ticker ATM implied volatility from the nearest expiry options chain. <strong>Mkt VIX &gt; 20</strong> = elevated S&P 500 market-wide volatility / inflated options premiums across the board.</p>
         <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders, not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
     </div>
@@ -608,24 +611,24 @@ let _progressTimer = null;
 
 function startProgress() {
     document.getElementById('progress-container').style.display = 'block';
-    const fill  = document.getElementById('progress-fill');
-    const label = document.getElementById('progress-label');
+    const fill      = document.getElementById('progress-fill');
+    const statusEl  = document.getElementById('last-updated');
     const stages = [
         [12, 'Connecting to market data...'],
         [30, 'Downloading price history...'],
         [50, 'Computing indicators...'],
-        [68, 'Running ML models...'],
+        [68, 'Running models...'],
         [83, 'Calculating signals...'],
         [92, 'Finalizing...'],
     ];
     let idx = 0;
-    fill.style.width  = stages[0][0] + '%';
-    label.textContent = stages[0][1];
+    fill.style.width    = stages[0][0] + '%';
+    statusEl.textContent = stages[0][1];
     idx = 1;
     _progressTimer = setInterval(() => {
         if (idx < stages.length) {
-            fill.style.width  = stages[idx][0] + '%';
-            label.textContent = stages[idx][1];
+            fill.style.width     = stages[idx][0] + '%';
+            statusEl.textContent = stages[idx][1];
             idx++;
         }
     }, 2200);
@@ -634,25 +637,22 @@ function startProgress() {
 function finishProgress() {
     if (_progressTimer) { clearInterval(_progressTimer); _progressTimer = null; }
     const fill      = document.getElementById('progress-fill');
-    const label     = document.getElementById('progress-label');
     const container = document.getElementById('progress-container');
-    fill.style.width  = '100%';
-    label.textContent = 'Done!';
+    fill.style.width = '100%';
     setTimeout(() => {
         container.style.display = 'none';
         fill.style.transition = 'none';
         fill.style.width = '0%';
         setTimeout(() => { fill.style.transition = 'width 0.85s ease'; }, 60);
-    }, 550);
+    }, 400);
 }
 
 function failProgress(msg) {
     if (_progressTimer) { clearInterval(_progressTimer); _progressTimer = null; }
-    const fill  = document.getElementById('progress-fill');
-    const label = document.getElementById('progress-label');
+    const fill = document.getElementById('progress-fill');
     fill.style.width      = '100%';
     fill.style.background = '#f85149';
-    label.textContent     = msg || 'Error — check connection';
+    document.getElementById('last-updated').textContent = msg || 'Error — check connection';
     setTimeout(() => {
         document.getElementById('progress-container').style.display = 'none';
         fill.style.background = '';
