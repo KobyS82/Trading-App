@@ -360,37 +360,35 @@
         /* ── HERO BANNER ── */
         .hero-banner {
             max-width: 980px;
-            margin: 0 auto 1.25rem;
-            padding: 0.65rem 1.1rem;
-            background: rgba(88,166,255,0.06);
-            border: 1px solid rgba(88,166,255,0.18);
-            border-radius: 8px;
-            font-size: 0.79rem;
+            margin: 0 auto 1rem;
+            padding: 0.32rem 1rem;
+            background: rgba(88,166,255,0.04);
+            border: 1px solid rgba(88,166,255,0.13);
+            border-radius: 6px;
+            font-size: 0.74rem;
             color: #8b949e;
-            line-height: 1.55;
+            display: flex; align-items: center; gap: 0.5rem;
         }
         .hero-name {
-            font-weight: 700;
-            color: #58a6ff;
-            font-size: 0.85rem;
-            letter-spacing: 0.02em;
+            font-weight: 700; color: #58a6ff;
+            font-size: 0.76rem; letter-spacing: 0.02em; white-space: nowrap;
         }
-        .hero-sep { color: #30363d; margin: 0 0.4rem; }
+        .hero-sep { color: #21262d; flex-shrink: 0; }
 
         /* ── BROKER LINKS ── */
         .broker-links {
-            display: flex; gap: 0.45rem; justify-content: center;
-            flex-wrap: wrap; margin: 0.5rem 0 0.2rem;
+            display: flex; gap: 0.35rem; justify-content: center;
+            flex-wrap: wrap; margin: 0.25rem 0 0;
         }
         .broker-link {
-            font-size: 0.72rem; color: #8b949e;
-            border: 1px solid #30363d; border-radius: 4px;
-            padding: 0.18rem 0.55rem;
+            font-size: 0.68rem; color: #484f58;
+            border: 1px solid #21262d; border-radius: 3px;
+            padding: 0.1rem 0.42rem;
             text-decoration: none; font-weight: 600;
             transition: border-color 0.15s, color 0.15s;
             white-space: nowrap;
         }
-        .broker-link:hover { color: #c9d1d9; border-color: #58a6ff; }
+        .broker-link:hover { color: #8b949e; border-color: #30363d; }
 
         /* ── FOOTNOTES ── */
         .footnotes {
@@ -411,10 +409,8 @@
 </head>
 <body>
 <div class="hero-banner">
-    <span class="hero-name">WalkForwardEdge</span><span class="hero-sep">·</span>
-    ML trading signals backed by walk-forward backtesting on data the model never saw.
-    Directional Accuracy is computed across 3 rolling out-of-sample windows (~240 samples) — not cherry-picked backtests.
-    Every prediction is logged with its realized outcome so you can verify, not just trust.
+    <span class="hero-name">WalkForwardEdge</span><span class="hero-sep">|</span>
+    Walk-forward backtested ML signals with auditable directional accuracy. No cherry-picked backtests.
 </div>
 <div class="app-container">
 
@@ -438,6 +434,7 @@
     <div class="card-header">
         <h1 id="symbol-title">WalkForwardEdge</h1>
         <div id="ticker-desc" class="ticker-desc"></div>
+        <div id="broker-links" class="broker-links"></div>
         <div id="last-updated" class="last-updated"></div>
     </div>
 
@@ -490,9 +487,6 @@
         <span id="signal-badge" class="signal-badge"></span>
         <span id="conviction-badge" class="conviction-badge"></span>
     </div>
-
-    <!-- BROKER LINKS -->
-    <div id="broker-links" class="broker-links"></div>
 
     <!-- MODEL CONSENSUS -->
     <div id="consensus-display" class="consensus-display"></div>
@@ -843,7 +837,7 @@ async function getPrediction() {
         const isLocal   = ['127.0.0.1', 'localhost'].includes(window.location.hostname)
                        || window.location.protocol === 'file:';
         const baseUrl   = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
-        // If local dev, use "uvicorn api.main:app --reload" in terminal
+        // If local dev, use "uvicorn api.main:app --reload" in terminal. DON'T DELETE
 
         const res  = await fetch(`${baseUrl}/predict?model=${model}&horizon=${horizon}&symbol=${symbol}`);
         const data = await res.json();
@@ -927,36 +921,32 @@ async function getPrediction() {
             ctxParts.push(`<span title="S&P 500 market-wide implied volatility index">Mkt VIX: <span style="color:${vixColor}; font-weight:700;">${vix}</span> <span style="color:#484f58; font-size:0.75rem;">${vixLabel}</span></span>`);
         }
 
-        ctxEl.innerHTML = ctxParts.join('<span style="color:#30363d;"> · </span>');
-
-        // ── Tech row: RSI + MACD ──
-        const techEl    = document.getElementById('tech-display');
-        const techParts = [];
-
         if (data.rsi != null) {
             const rsiColor = data.rsi > 70 ? '#f85149' : data.rsi < 30 ? '#3fb950' : '#8b949e';
-            const rsiLabel = data.rsi > 70 ? 'Overbought' : data.rsi < 30 ? 'Oversold' : 'Neutral';
-            techParts.push(`<span>RSI: <span style="color:${rsiColor}; font-weight:700;">${data.rsi}</span> <span style="color:#484f58; font-size:0.72rem;">${rsiLabel}</span></span>`);
+            const rsiLabel = data.rsi > 70 ? 'OB' : data.rsi < 30 ? 'OS' : '';
+            const rsiSuffix = rsiLabel ? ` <span style="color:#484f58; font-size:0.72rem;">${rsiLabel}</span>` : '';
+            ctxParts.push(`<span>RSI: <span style="color:${rsiColor}; font-weight:700;">${data.rsi}</span>${rsiSuffix}</span>`);
         }
 
         if (data.macd != null) {
             const macdColor = data.macd >= 0 ? '#3fb950' : '#f85149';
             const macdSign  = data.macd >= 0 ? '+' : '';
-            techParts.push(`<span>MACD: <span style="color:${macdColor}; font-weight:700;">${macdSign}${data.macd}</span></span>`);
+            ctxParts.push(`<span>MACD: <span style="color:${macdColor}; font-weight:700;">${macdSign}${data.macd}</span></span>`);
         }
 
         if (data.next_earnings) {
-            techParts.push(`<span>Next Earnings: <span style="color:#d29922; font-weight:700;">${data.next_earnings}</span></span>`);
+            ctxParts.push(`<span>Earnings: <span style="color:#d29922; font-weight:700;">${data.next_earnings}</span></span>`);
         }
 
-        techEl.innerHTML = techParts.join('<span style="color:#30363d;"> · </span>');
+        ctxEl.innerHTML = ctxParts.join('<span style="color:#30363d;"> · </span>');
+        document.getElementById('tech-display').innerHTML = '';
 
         // ── Broker deep links ──
         document.getElementById('broker-links').innerHTML =
             `<a class="broker-link" href="https://robinhood.com/stocks/${symbol}" target="_blank" rel="noopener noreferrer">Robinhood ↗</a>` +
-            `<a class="broker-link" href="https://www.webull.com/quote/${symbol}" target="_blank" rel="noopener noreferrer">Webull ↗</a>` +
             `<a class="broker-link" href="https://www.tradingview.com/chart/?symbol=${symbol}" target="_blank" rel="noopener noreferrer">TradingView ↗</a>` +
-            `<a class="broker-link" href="https://finance.yahoo.com/quote/${symbol}" target="_blank" rel="noopener noreferrer">Yahoo Finance ↗</a>`;
+            `<a class="broker-link" href="https://finance.yahoo.com/quote/${symbol}" target="_blank" rel="noopener noreferrer">Yahoo Finance ↗</a>` +
+            `<a class="broker-link" href="https://www.marketwatch.com/investing/stock/${symbol.toLowerCase()}" target="_blank" rel="noopener noreferrer">MarketWatch ↗</a>`;
 
         // ── Warnings ──
         const warnEl   = document.getElementById('warning-display');
