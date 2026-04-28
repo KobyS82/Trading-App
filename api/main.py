@@ -1,15 +1,57 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import yfinance as yf
 import pandas as pd
+import httpx
+import math
+import os
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from lightgbm import LGBMRegressor
 from textblob import TextBlob
 
 app = FastAPI()
+
+# ── SUPABASE CONFIG ──────────────────────────────────────────────────────────
+# Set these env vars in Render dashboard. The app works fine without them —
+# logging is a silent no-op when they're absent.
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+
+
+def _sb_headers() -> dict:
+    return {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+def _log_to_supabase(data: dict) -> None:
+    """Background task: insert a prediction record. Silently skips if Supabase is not configured."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return
+    try:
+        payload = {
+            "symbol":               data["symbol"],
+            "model":                data["model_used"],
+            "horizon":              data["horizon_days"],
+            "signal":               data["signal"],
+            "conviction":           data["conviction"],
+            "predicted_pct":        data["predicted_change_pct"],
+            "entry_price":          data["current_price"],
+            "directional_accuracy": data["directional_accuracy"],
+        }
+        with httpx.Client(timeout=6.0) as client:
+            client.post(
+                f"{SUPABASE_URL}/rest/v1/predictions",
+                headers={**_sb_headers(), "Prefer": "return=minimal"},
+                json=payload,
+            )
+    except Exception as exc:
+        print(f"Supabase log failed: {exc}")
 
 # In-memory cache: (symbol, model, horizon) -> (timestamp, response)
 # Prevents the watchlist scanner from re-running expensive ML for every tab load.
@@ -120,8 +162,14 @@ def root():
 
 
 @app.get("/predict")
-def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
-    print(f"API called: {model} | {symbol} | {horizon}d")
+def get_prediction(
+    background_tasks: BackgroundTasks,
+    model: str = "lgb",
+    horizon: int = 1,
+    symbol: str = "SPY",
+    source: str = "web",   # "screener" suppresses logging
+):
+    print(f"API called: {model} | {symbol} | {horizon}d | src={source}")
 
     # --- CACHE CHECK ---
     cache_key = (symbol.upper(), model, horizon)
@@ -374,4 +422,95 @@ def get_prediction(model: str = "lgb", horizon: int = 1, symbol: str = "SPY"):
     }
 
     _predict_cache[cache_key] = (time.time(), response)
+
+    # Log to Supabase in the background (non-blocking, skips scanner calls)
+    if source != "screener":
+        background_tasks.add_task(_log_to_supabase, response)
+
     return response
+
+
+# ── SUPABASE OUTCOME CHECKER ─────────────────────────────────────────────────
+
+@app.get("/check-outcomes")
+def check_outcomes():
+    """
+    Fetch prices for predictions whose horizon has elapsed and write actual_pct + was_correct.
+    Safe to call repeatedly — skips rows that already have an outcome.
+    """
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {"error": "Supabase not configured", "updated": 0}
+
+    headers = _sb_headers()
+    updated = 0
+    errors  = []
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(
+                f"{SUPABASE_URL}/rest/v1/predictions",
+                headers=headers,
+                params={
+                    "select":      "id,symbol,horizon,predicted_pct,entry_price,logged_at",
+                    "outcome_at":  "is.null",
+                    "order":       "logged_at.asc",
+                    "limit":       "100",
+                },
+            )
+            pending = resp.json()
+    except Exception as exc:
+        return {"error": str(exc), "updated": 0}
+
+    now = datetime.now(timezone.utc)
+    for row in pending:
+        try:
+            logged_at = datetime.fromisoformat(row["logged_at"].replace("Z", "+00:00"))
+            # horizon is in trading days; convert to calendar days conservatively
+            cal_days_needed = math.ceil(row["horizon"] * 365 / 252)
+            if (now - logged_at).days < cal_days_needed:
+                continue  # not enough time has elapsed yet
+
+            hist = yf.Ticker(row["symbol"]).history(period="2d")
+            if hist.empty:
+                continue
+            current_price = float(hist["Close"].iloc[-1])
+            actual_pct    = round((current_price - row["entry_price"]) / row["entry_price"] * 100, 3)
+            was_correct   = (row["predicted_pct"] >= 0) == (actual_pct >= 0)
+
+            with httpx.Client(timeout=5.0) as client:
+                client.patch(
+                    f"{SUPABASE_URL}/rest/v1/predictions",
+                    headers={**headers, "Prefer": "return=minimal"},
+                    params={"id": f"eq.{row['id']}"},
+                    json={
+                        "outcome_at":  now.isoformat(),
+                        "actual_pct":  actual_pct,
+                        "was_correct": was_correct,
+                    },
+                )
+            updated += 1
+        except Exception as exc:
+            errors.append(f"{row.get('id')}: {exc}")
+
+    return {"updated": updated, "pending_skipped": len(pending) - updated, "errors": errors[:5]}
+
+
+@app.get("/logs")
+def get_logs(limit: int = 100):
+    """Return recent prediction log entries with outcomes where available."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {"error": "Supabase not configured", "logs": []}
+    try:
+        with httpx.Client(timeout=8.0) as client:
+            resp = client.get(
+                f"{SUPABASE_URL}/rest/v1/predictions",
+                headers=_sb_headers(),
+                params={
+                    "select": "*",
+                    "order":  "logged_at.desc",
+                    "limit":  str(min(limit, 500)),
+                },
+            )
+        return {"logs": resp.json()}
+    except Exception as exc:
+        return {"error": str(exc), "logs": []}

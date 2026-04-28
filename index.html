@@ -1159,7 +1159,7 @@ async function scanScreener(force = false) {
             if (!symbol) break;
             let row;
             try {
-                const res  = await fetch(`${baseUrl}/predict?symbol=${symbol}&model=${scanModel}&horizon=${scanHorizon}`);
+                const res  = await fetch(`${baseUrl}/predict?symbol=${symbol}&model=${scanModel}&horizon=${scanHorizon}&source=screener`);
                 const data = await res.json();
                 row = { symbol, da: data.directional_accuracy, pct: data.predicted_change_pct };
             } catch {
