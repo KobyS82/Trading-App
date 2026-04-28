@@ -21,11 +21,22 @@
             justify-content: center;
             align-items: flex-start;
             flex-wrap: wrap;
-            max-width: 100%;
+            max-width: 980px;
+            margin: 0 auto;
         }
 
         /* ── SIDE PANEL (Edge Watchlist) ── */
-        .side-panel { width: 280px; flex-shrink: 0; }
+        .side-panel {
+            width: 280px;
+            flex-shrink: 0;
+            position: sticky;
+            top: 1.5rem;
+            max-height: calc(100vh - 3rem);
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #30363d transparent;
+            align-self: flex-start;
+        }
         .side-card {
             background: #161b22;
             border: 1px solid #30363d;
@@ -61,6 +72,26 @@
             grid-template-columns: 3.2rem 1fr;
         }
         .screener-row.loading:hover { background: transparent; }
+        .screener-settings {
+            display: inline-block;
+            font-size: 0.67rem; color: #8b949e;
+            background: #21262d; border: 1px solid #30363d;
+            border-radius: 20px;
+            padding: 0.1rem 0.5rem;
+            margin-bottom: 0.65rem;
+            font-weight: 600; letter-spacing: 0.02em;
+        }
+        .screener-skeleton {
+            height: 30px; border-radius: 4px;
+            background: linear-gradient(90deg, #21262d 25%, #2d333b 50%, #21262d 75%);
+            background-size: 200% 100%;
+            animation: screener-shimmer 1.4s infinite;
+            margin: 0.35rem 0;
+        }
+        @keyframes screener-shimmer {
+            0%   { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
         .screener-empty {
             font-size: 0.74rem; color: #484f58;
             text-align: center; padding: 0.9rem 0.4rem; line-height: 1.45;
@@ -80,8 +111,13 @@
         .scan-btn:hover { background: #30363d; }
         .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        @media (max-width: 880px) {
-            .side-panel { width: 100%; max-width: 520px; }
+        @media (max-width: 720px) {
+            .side-panel {
+                width: 100%;
+                max-width: 620px;
+                position: static;
+                max-height: none;
+            }
         }
         @media (max-width: 480px) {
             .app-container { gap: 0; }
@@ -93,8 +129,9 @@
             border: 1px solid #30363d;
             border-radius: 12px;
             padding: 1.75rem;
-            width: 100%;
-            max-width: 520px;
+            flex: 1;
+            min-width: 0;
+            max-width: 640px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.55);
         }
 
@@ -330,7 +367,7 @@
         /* ── MOBILE ── */
         @media (max-width: 480px) {
             body { padding: 0; }
-            .card { border-radius: 0; min-height: 100vh; border: none; }
+            .card { border-radius: 0; min-height: 100vh; border: none; max-width: 100%; }
             .select-row { grid-template-columns: 1fr; }
             .price-now, .price-tgt { font-size: 1.75rem; }
             .price-section { gap: 1rem; }
@@ -339,6 +376,21 @@
 </head>
 <body>
 <div class="app-container">
+
+<!-- EDGE WATCHLIST — left sidebar, sticky -->
+<aside class="side-panel">
+    <div class="side-card">
+        <h3>Edge Watchlist</h3>
+        <div id="screener-settings" class="screener-settings">LightGBM · 21 DTE</div>
+        <div class="side-desc">Tickers with 55%+ directional accuracy on the current model and horizon. Click to analyze.</div>
+        <div id="screener-list"></div>
+        <div class="side-footer">
+            <button id="scan-btn" class="scan-btn" onclick="scanScreener(true)">↻ Scan</button>
+            <span id="screener-status"></span>
+        </div>
+    </div>
+</aside>
+
 <div class="card">
 
     <!-- HEADER -->
@@ -477,18 +529,6 @@
 
 </div>
 
-<!-- EDGE WATCHLIST (side panel) -->
-<aside class="side-panel">
-    <div class="side-card">
-        <h3>Edge Watchlist</h3>
-        <div class="side-desc">Popular tickers where the model has 55%+ directional accuracy on the current model and horizon. Click a row to load it in the main panel.</div>
-        <div id="screener-list"></div>
-        <div class="side-footer">
-            <button id="scan-btn" class="scan-btn" onclick="scanScreener(true)">↻ Scan</button>
-            <span id="screener-status"></span>
-        </div>
-    </div>
-</aside>
 
 </div><!-- /app-container -->
 
@@ -971,9 +1011,17 @@ function saveScreenerToCache(results) {
 }
 
 function renderScreener() {
-    const container = document.getElementById('screener-list');
-    const status    = document.getElementById('screener-status');
-    const scanBtn   = document.getElementById('scan-btn');
+    const container  = document.getElementById('screener-list');
+    const status     = document.getElementById('screener-status');
+    const scanBtn    = document.getElementById('scan-btn');
+    const settingsEl = document.getElementById('screener-settings');
+
+    if (settingsEl) {
+        const m = document.getElementById('model-select').value;
+        const h = document.getElementById('horizon-select').value;
+        const mLabel = m === 'lgb' ? 'LightGBM' : m === 'rf' ? 'Rand. Forest' : 'Linear';
+        settingsEl.textContent = `${mLabel} · ${h} DTE`;
+    }
 
     const filtered = _screenerResults
         .filter(r => r.da != null && r.da >= 55)
@@ -981,7 +1029,9 @@ function renderScreener() {
 
     if (filtered.length === 0) {
         if (_screenerScanning && _screenerResults.length === 0) {
-            container.innerHTML = '<div class="screener-empty">Scanning watchlist... can take a minute.</div>';
+            container.innerHTML = [1,2,3,4,5].map(() =>
+                `<div class="screener-skeleton"></div>`
+            ).join('');
         } else if (_screenerScanning) {
             container.innerHTML = '<div class="screener-empty">No 55%+ stocks in results so far. Still scanning.</div>';
         } else if (_screenerResults.length === 0) {
