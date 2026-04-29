@@ -18,6 +18,8 @@ from sklearn.ensemble import RandomForestRegressor
 from lightgbm import LGBMRegressor
 from textblob import TextBlob
 
+_scan_lock = threading.Lock()
+
 load_dotenv()  # loads .env on local dev; no-op on Render (uses dashboard env vars)
 
 
@@ -466,24 +468,29 @@ def _check_paper_trades_job() -> dict:
 
 
 def auto_scan() -> dict:
-    """Full scan: resolve open trades, then search watchlist for new high-conviction entries."""
-    print(f"[bot] Auto-scan start {datetime.now(timezone.utc).isoformat()}")
-    _check_paper_trades_job()
-    entered = 0
-    # Download VIX once and reuse — saves 31 redundant downloads per scan
-    vix_data = yf.download("^VIX", period="5y", progress=False, auto_adjust=True).tail(2500)
-    if isinstance(vix_data.columns, pd.MultiIndex):
-        vix_data.columns = vix_data.columns.get_level_values(0)
-    for symbol in SCAN_WATCHLIST:
-        try:
-            for t in _scan_ticker(symbol, vix_data):
-                _insert_paper_trade(**t)
-                entered += 1
-        except Exception as exc:
-            print(f"[bot] Error {symbol}: {exc}")
-        time.sleep(0.3)
-    print(f"[bot] Auto-scan done — {entered} new paper trades")
-    return {"entered": entered}
+    if not _scan_lock.acquire(blocking=False):
+        print("[bot] Scan already running, skipping")
+        return {"entered": 0, "skipped": "scan already in progress"}
+    try:
+        print(f"[bot] Auto-scan start {datetime.now(timezone.utc).isoformat()}")
+        _check_paper_trades_job()
+        entered = 0
+        # Download VIX once and reuse — saves 31 redundant downloads per scan
+        vix_data = yf.download("^VIX", period="5y", progress=False, auto_adjust=True).tail(2500)
+        if isinstance(vix_data.columns, pd.MultiIndex):
+            vix_data.columns = vix_data.columns.get_level_values(0)
+        for symbol in SCAN_WATCHLIST:
+            try:
+                for t in _scan_ticker(symbol, vix_data):
+                    _insert_paper_trade(**t)
+                    entered += 1
+            except Exception as exc:
+                print(f"[bot] Error {symbol}: {exc}")
+            time.sleep(0.3)
+        print(f"[bot] Auto-scan done — {entered} new paper trades")
+        return {"entered": entered}
+    finally:
+        _scan_lock.release()
 
 
 @app.get("/")
