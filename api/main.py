@@ -838,12 +838,18 @@ def get_logs(limit: int = 100):
         return {"error": str(exc), "logs": []}
 
 
-@app.post("/scan-now")
+@app.api_route("/scan-now", methods=["GET", "POST"])
 def scan_now():
     """Trigger the paper trading scanner immediately in the background."""
     t = threading.Thread(target=auto_scan, daemon=True)
     t.start()
     return {"status": "scan started", "watchlist_size": len(SCAN_WATCHLIST)}
+
+
+@app.api_route("/check-paper-trades", methods=["GET", "POST"])
+def check_paper_trades_endpoint():
+    """Resolve open paper trades that have hit stop/target/expiry."""
+    return _check_paper_trades_job()
 
 
 @app.get("/paper-trades")

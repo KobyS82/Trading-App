@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WalkForwardEdge — Bot Dashboard</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #0d1117;
+            color: #c9d1d9;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            min-height: 100vh;
+            padding: 1.5rem 1rem 3rem;
+        }
+
+        a { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        /* ── HEADER ── */
+        .page-header {
+            max-width: 1100px;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+        }
+        .page-header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #e6edf3;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .page-header h1 span { color: #58a6ff; }
+        .nav-link {
+            font-size: 0.8rem;
+            color: #8b949e;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            padding: 0.3rem 0.75rem;
+            transition: background 0.15s, color 0.15s;
+        }
+        .nav-link:hover { background: #21262d; color: #c9d1d9; text-decoration: none; }
+
+        /* ── MAIN LAYOUT ── */
+        .page-body { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.5rem; }
+
+        /* ── CARDS ── */
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+        }
+        .card-title {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        /* ── SUMMARY ROW ── */
+        .summary-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 1rem;
+        }
+        .stat-card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 10px;
+            padding: 1rem 1.25rem;
+            text-align: center;
+        }
+        .stat-label { font-size: 0.72rem; color: #8b949e; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.4rem; }
+        .stat-value { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #e6edf3; }
+        .stat-value.green  { color: #3fb950; }
+        .stat-value.red    { color: #f85149; }
+        .stat-value.blue   { color: #58a6ff; }
+        .stat-value.yellow { color: #d29922; }
+
+        /* ── CONTROLS ── */
+        .controls {
+            display: flex;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .btn {
+            padding: 0.45rem 1rem;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            background: #21262d;
+            color: #c9d1d9;
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .btn:hover { background: #2d333b; border-color: #58a6ff; }
+        .btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+        .btn.primary:hover { background: #388bfd; border-color: #388bfd; }
+        .btn.success { background: #238636; border-color: #238636; color: #fff; }
+        .btn.success:hover { background: #2ea043; border-color: #2ea043; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .status-msg {
+            font-size: 0.78rem;
+            color: #8b949e;
+            font-style: italic;
+            margin-left: 0.25rem;
+        }
+        .status-msg.ok  { color: #3fb950; font-style: normal; }
+        .status-msg.err { color: #f85149; font-style: normal; }
+
+        /* ── FILTER TABS ── */
+        .filter-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1rem; }
+        .tab {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid #30363d;
+            background: transparent;
+            color: #8b949e;
+            transition: all 0.15s;
+        }
+        .tab.active, .tab:hover { background: #21262d; color: #c9d1d9; border-color: #58a6ff; }
+        .tab.active { color: #58a6ff; }
+
+        /* ── TABLE ── */
+        .table-wrap { overflow-x: auto; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.8rem;
+        }
+        thead th {
+            text-align: left;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: #8b949e;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid #21262d;
+            white-space: nowrap;
+        }
+        tbody tr {
+            border-bottom: 1px solid #21262d;
+            transition: background 0.12s;
+        }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: #1c2128; }
+        tbody td {
+            padding: 0.55rem 0.75rem;
+            font-variant-numeric: tabular-nums;
+            white-space: nowrap;
+        }
+
+        .symbol-badge {
+            font-weight: 700;
+            color: #e6edf3;
+            font-size: 0.85rem;
+        }
+        .signal-buy  { color: #3fb950; font-weight: 700; }
+        .signal-sell { color: #f85149; font-weight: 700; }
+
+        .conviction-strong   { color: #3fb950; font-weight: 600; }
+        .conviction-moderate { color: #d29922; font-weight: 600; }
+        .conviction-weak     { color: #8b949e; }
+
+        .reason-target { color: #3fb950; }
+        .reason-stop   { color: #f85149; }
+        .reason-expired{ color: #8b949e; }
+
+        .pnl-pos { color: #3fb950; font-weight: 700; }
+        .pnl-neg { color: #f85149; font-weight: 700; }
+        .pnl-neu { color: #8b949e; }
+
+        .empty-row td {
+            text-align: center;
+            color: #484f58;
+            padding: 2rem;
+            font-style: italic;
+        }
+
+        /* ── WATCHLIST ── */
+        .watchlist-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+        .chip {
+            font-size: 0.72rem;
+            font-weight: 600;
+            background: #21262d;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            padding: 0.15rem 0.45rem;
+            color: #8b949e;
+        }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width: 600px) {
+            .summary-row { grid-template-columns: 1fr 1fr; }
+            .stat-value  { font-size: 1.25rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <h1>WalkForwardEdge <span>/ Bot Dashboard</span></h1>
+    <a class="nav-link" href="index.html">← Back to Signals</a>
+</div>
+
+<div class="page-body">
+
+    <!-- Summary Stats -->
+    <div class="summary-row" id="summary-row">
+        <div class="stat-card"><div class="stat-label">Total P&L</div><div class="stat-value" id="stat-pnl">—</div></div>
+        <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="stat-wr">—</div></div>
+        <div class="stat-card"><div class="stat-label">Open Trades</div><div class="stat-value blue" id="stat-open">—</div></div>
+        <div class="stat-card"><div class="stat-label">Closed Trades</div><div class="stat-value" id="stat-closed">—</div></div>
+        <div class="stat-card"><div class="stat-label">Target Hits</div><div class="stat-value green" id="stat-targets">—</div></div>
+        <div class="stat-card"><div class="stat-label">Stopped Out</div><div class="stat-value red" id="stat-stops">—</div></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="card" style="padding: 1rem 1.5rem;">
+        <div class="controls">
+            <button class="btn primary" onclick="triggerScan()">⚡ Scan Now</button>
+            <button class="btn success" onclick="checkTrades()">✓ Check Outcomes</button>
+            <button class="btn" onclick="loadAll()">⟳ Refresh</button>
+            <span class="status-msg" id="status-msg">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Open Positions -->
+    <div class="card">
+        <div class="card-title">Open Positions</div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Signal</th>
+                        <th>DTE</th>
+                        <th>Entry</th>
+                        <th>Stop</th>
+                        <th>Target</th>
+                        <th>Conviction</th>
+                        <th>DA</th>
+                        <th>Predicted</th>
+                        <th>Opened</th>
+                    </tr>
+                </thead>
+                <tbody id="open-tbody">
+                    <tr class="empty-row"><td colspan="10">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Closed Trades -->
+    <div class="card">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-bottom:0.75rem;">
+            <div class="card-title" style="margin:0;">Trade History</div>
+            <div class="filter-tabs" id="filter-tabs">
+                <button class="tab active" data-filter="all"      onclick="setFilter('all')">All</button>
+                <button class="tab"        data-filter="take_profit" onclick="setFilter('take_profit')">Target Hit</button>
+                <button class="tab"        data-filter="stop_loss"   onclick="setFilter('stop_loss')">Stopped Out</button>
+                <button class="tab"        data-filter="expired"     onclick="setFilter('expired')">Expired</button>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Signal</th>
+                        <th>DTE</th>
+                        <th>Entry</th>
+                        <th>Result %</th>
+                        <th>P&L</th>
+                        <th>Outcome</th>
+                        <th>Conviction</th>
+                        <th>DA</th>
+                        <th>Opened</th>
+                        <th>Closed</th>
+                    </tr>
+                </thead>
+                <tbody id="closed-tbody">
+                    <tr class="empty-row"><td colspan="11">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="card">
+        <div class="card-title">Scan Watchlist (32 symbols, twice daily Mon–Fri)</div>
+        <div class="watchlist-chips" id="watchlist-chips"></div>
+        <div style="margin-top:0.75rem; font-size:0.72rem; color:#8b949e;">
+            Scans run at <strong style="color:#c9d1d9;">9:35 AM ET</strong> and <strong style="color:#c9d1d9;">3:55 PM ET</strong> on market days.
+            Criteria: 1-day requires DA ≥ 60% + Strong conviction; 3–5-day requires DA ≥ 55%; 10–21-day requires DA ≥ 52%.
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const PROD_API = 'https://trading-app-api-3d6f.onrender.com';
+    const isLocal  = ['127.0.0.1', 'localhost'].includes(window.location.hostname)
+                  || window.location.protocol === 'file:';
+    const API      = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
+
+    const WATCHLIST = [
+        "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","AMD","INTC","AVGO",
+        "QCOM","MU","JPM","V","MA","GS","WMT","HD","PG","KO",
+        "JNJ","UNH","NFLX","CRM","PLTR","COIN",
+        "SPY","QQQ","IWM","GLD","XLF","XLE",
+    ];
+
+    let allClosed = [];
+    let currentFilter = 'all';
+
+    function setStatus(msg, cls = '') {
+        const el = document.getElementById('status-msg');
+        el.textContent = msg;
+        el.className = 'status-msg' + (cls ? ' ' + cls : '');
+    }
+
+    function fmtDate(iso) {
+        if (!iso) return '—';
+        const d = new Date(iso);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+             + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function fmtPct(v) {
+        if (v == null) return '—';
+        return (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+    }
+
+    function fmtPnl(v) {
+        if (v == null) return '—';
+        return (v >= 0 ? '+$' : '-$') + Math.abs(v).toFixed(2);
+    }
+
+    function pnlClass(v) {
+        if (v == null) return 'pnl-neu';
+        return v > 0 ? 'pnl-pos' : (v < 0 ? 'pnl-neg' : 'pnl-neu');
+    }
+
+    function convictionClass(c) {
+        if (!c) return '';
+        return c === 'Strong' ? 'conviction-strong' : (c === 'Moderate' ? 'conviction-moderate' : 'conviction-weak');
+    }
+
+    function reasonLabel(r) {
+        if (r === 'take_profit') return { text: '🎯 Target', cls: 'reason-target' };
+        if (r === 'stop_loss')   return { text: '🛑 Stopped', cls: 'reason-stop' };
+        if (r === 'expired')     return { text: '⏰ Expired', cls: 'reason-expired' };
+        return { text: r || '—', cls: '' };
+    }
+
+    function renderOpenTrades(trades) {
+        const tbody = document.getElementById('open-tbody');
+        if (!trades.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="10">No open positions</td></tr>';
+            return;
+        }
+        tbody.innerHTML = trades.map(t => `
+            <tr>
+                <td class="symbol-badge">${t.symbol}</td>
+                <td class="${t.signal === 'BUY' ? 'signal-buy' : 'signal-sell'}">${t.signal === 'BUY' ? '▲ BUY' : '▼ SELL'}</td>
+                <td>${t.horizon_days}d</td>
+                <td>$${(t.entry_price || 0).toFixed(2)}</td>
+                <td style="color:#f85149;">${fmtPct(t.stop_loss_pct)}</td>
+                <td style="color:#3fb950;">${fmtPct(t.take_profit_pct)}</td>
+                <td class="${convictionClass(t.conviction)}">${t.conviction || '—'}</td>
+                <td>${t.da_score != null ? t.da_score.toFixed(1) + '%' : '—'}</td>
+                <td>${fmtPct(t.predicted_pct)}</td>
+                <td style="color:#8b949e;">${fmtDate(t.opened_at)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function renderClosedTrades(trades) {
+        const tbody = document.getElementById('closed-tbody');
+        const filtered = currentFilter === 'all' ? trades : trades.filter(t => t.close_reason === currentFilter);
+        if (!filtered.length) {
+            tbody.innerHTML = '<tr class="empty-row"><td colspan="11">No trades match this filter</td></tr>';
+            return;
+        }
+        tbody.innerHTML = filtered.map(t => {
+            const reason = reasonLabel(t.close_reason);
+            return `
+            <tr>
+                <td class="symbol-badge">${t.symbol}</td>
+                <td class="${t.signal === 'BUY' ? 'signal-buy' : 'signal-sell'}">${t.signal === 'BUY' ? '▲ BUY' : '▼ SELL'}</td>
+                <td>${t.horizon_days}d</td>
+                <td>$${(t.entry_price || 0).toFixed(2)}</td>
+                <td class="${pnlClass(t.outcome_pct)}">${fmtPct(t.outcome_pct)}</td>
+                <td class="${pnlClass(t.outcome_pnl)}">${fmtPnl(t.outcome_pnl)}</td>
+                <td class="${reason.cls}">${reason.text}</td>
+                <td class="${convictionClass(t.conviction)}">${t.conviction || '—'}</td>
+                <td>${t.da_score != null ? t.da_score.toFixed(1) + '%' : '—'}</td>
+                <td style="color:#8b949e;">${fmtDate(t.opened_at)}</td>
+                <td style="color:#8b949e;">${fmtDate(t.closed_at)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderSummary(summary) {
+        const pnl = summary.total_pnl || 0;
+        document.getElementById('stat-pnl').textContent    = fmtPnl(pnl);
+        document.getElementById('stat-pnl').className      = 'stat-value ' + (pnl > 0 ? 'green' : pnl < 0 ? 'red' : '');
+        document.getElementById('stat-wr').textContent     = summary.win_rate_pct != null ? summary.win_rate_pct + '%' : '—';
+        document.getElementById('stat-open').textContent   = summary.open ?? '—';
+        document.getElementById('stat-closed').textContent = summary.closed ?? '—';
+    }
+
+    function renderExtendedStats(closed) {
+        const targets = closed.filter(t => t.close_reason === 'take_profit').length;
+        const stops   = closed.filter(t => t.close_reason === 'stop_loss').length;
+        document.getElementById('stat-targets').textContent = targets;
+        document.getElementById('stat-stops').textContent   = stops;
+    }
+
+    function setFilter(f) {
+        currentFilter = f;
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.toggle('active', tab.dataset.filter === f);
+        });
+        renderClosedTrades(allClosed);
+    }
+
+    async function loadAll() {
+        setStatus('Refreshing...');
+        try {
+            const res  = await fetch(`${API}/paper-trades?limit=200`);
+            const data = await res.json();
+
+            if (data.error) { setStatus('Error: ' + data.error, 'err'); return; }
+
+            const open   = (data.trades || []).filter(t => t.status === 'open');
+            allClosed    = (data.trades || []).filter(t => t.status !== 'open');
+
+            renderOpenTrades(open);
+            renderClosedTrades(allClosed);
+            renderSummary(data.summary || {});
+            renderExtendedStats(allClosed);
+
+            const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            setStatus(`Updated ${now}`, 'ok');
+        } catch (e) {
+            setStatus('Failed to load — is the server running?', 'err');
+        }
+    }
+
+    async function triggerScan() {
+        const btn = event.target;
+        btn.disabled = true;
+        setStatus('Scan started — takes ~4 min to run through all tickers...');
+        try {
+            const res  = await fetch(`${API}/scan-now`, { method: 'POST' });
+            const data = await res.json();
+            setStatus(`Scan running in background (${data.watchlist_size} tickers)`, 'ok');
+            setTimeout(loadAll, 8000);
+        } catch (e) {
+            setStatus('Scan request failed', 'err');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function checkTrades() {
+        const btn = event.target;
+        btn.disabled = true;
+        setStatus('Checking open trade outcomes...');
+        try {
+            const res  = await fetch(`${API}/check-paper-trades`, { method: 'POST' });
+            const data = await res.json();
+            setStatus(`Resolved ${data.updated ?? 0} trade(s)`, 'ok');
+            await loadAll();
+        } catch (e) {
+            setStatus('Check failed', 'err');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    // Render watchlist chips
+    const chips = document.getElementById('watchlist-chips');
+    WATCHLIST.forEach(sym => {
+        const span = document.createElement('span');
+        span.className = 'chip';
+        span.textContent = sym;
+        chips.appendChild(span);
+    });
+
+    // Auto-refresh every 5 minutes
+    loadAll();
+    setInterval(loadAll, 5 * 60 * 1000);
+</script>
+</body>
+</html>
