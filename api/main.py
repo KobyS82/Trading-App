@@ -25,11 +25,12 @@ load_dotenv()  # loads .env on local dev; no-op on Render (uses dashboard env va
 
 @asynccontextmanager
 async def lifespan(_app):
-    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=9,  minute=35))
-    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=12, minute=30))
-    _scheduler.add_job(_check_paper_trades_job, CronTrigger(day_of_week="mon-fri", hour=15, minute=55))
+    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=9,     minute=35))
+    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=12,    minute=30))
+    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=15,    minute=55))
+    _scheduler.add_job(_check_paper_trades_job, CronTrigger(day_of_week="mon-fri", hour="9-16",minute="*/30"))
     _scheduler.start()
-    print("[scheduler] Started — scans at 09:35, 12:30, and 15:55 ET, Mon–Fri")
+    print("[scheduler] Started — scans at 09:35, 12:30, and 15:55 ET | outcomes checked every 30min 9-4 ET, Mon–Fri")
     yield
     _scheduler.shutdown()
 
