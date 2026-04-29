@@ -434,7 +434,7 @@
 <body>
 <div class="hero-banner">
     <span class="hero-name">WalkForwardEdge</span><span class="hero-sep">|</span>
-    Walk-forward backtested Machine Learning signals with auditable directional accuracy. No cherry-picked backtests.
+    Walk-forward backtested ML signals with auditable directional accuracy. Bot scans 60 tickers 3× daily. No cherry-picked backtests.
     <a href="bot.html" style="margin-left:auto; font-size:0.75rem; color:#58a6ff; white-space:nowrap; text-decoration:none; opacity:0.8;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8">⚡ Bot Dashboard →</a>
 </div>
 <div class="app-container">
@@ -599,9 +599,9 @@
 
     <!-- FOOTNOTES -->
     <div class="footnotes">
-        <p><strong>Directional Accuracy:</strong> walk-forward backtesting on data the model never saw (3 windows × ~80 days = 240 samples). <strong>≥55%</strong> = real edge · <strong>50–55%</strong> = marginal · <strong>&lt;50%</strong> = worse than a coin flip for this ticker/horizon. The "Recent Predictions vs Actuals" panel above shows the last 25 of those backtested predictions with their realized outcomes, so you can verify rather than trust the headline number.</p>
+        <p><strong>Directional Accuracy:</strong> walk-forward backtesting on data the model never saw (5 windows × ~80 days = 400 samples).
         <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only. Linear Regression is excluded because it is too simple to capture price dynamics reliably. Weak conviction is forced near earnings or Fed meetings regardless of accuracy. These are the two Machine Learning (ML) models; Linear Regression is a statistical baseline.</p>
-        <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only). <strong>IV</strong> = per-ticker ATM implied volatility from the nearest expiry options chain. <strong>Mkt VIX &gt; 20</strong> = elevated S&P 500 market-wide volatility / inflated options premiums across the board.</p>
+        <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only). <strong>IV</strong> = per-ticker ATM implied volatility from the nearest expiry options chain — this is specific to the stock you are viewing. <strong>Mkt VIX</strong> = the CBOE S&P 500 Volatility Index, a market-wide fear gauge — not specific to any individual ticker. VIX &gt; 20 = elevated broad market volatility / inflated options premiums across all stocks.</p>
         <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders, not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
     </div>
 
@@ -612,6 +612,7 @@
 
 <script>
 const POPULAR_TICKERS = [
+    // ETFs
     { symbol: 'SPY',   name: 'S&P 500 ETF' },
     { symbol: 'QQQ',   name: 'Nasdaq 100 ETF' },
     { symbol: 'IWM',   name: 'Russell 2000 ETF' },
@@ -620,6 +621,11 @@ const POPULAR_TICKERS = [
     { symbol: 'SLV',   name: 'Silver ETF' },
     { symbol: 'TLT',   name: '20yr Treasury ETF' },
     { symbol: 'VXX',   name: 'VIX Futures ETF' },
+    { symbol: 'XLF',   name: 'Financials ETF' },
+    { symbol: 'XLE',   name: 'Energy ETF' },
+    { symbol: 'XLK',   name: 'Tech ETF' },
+    { symbol: 'ARKK',  name: 'ARK Innovation ETF' },
+    // Mega-cap tech
     { symbol: 'AAPL',  name: 'Apple' },
     { symbol: 'MSFT',  name: 'Microsoft' },
     { symbol: 'NVDA',  name: 'NVIDIA' },
@@ -628,16 +634,54 @@ const POPULAR_TICKERS = [
     { symbol: 'META',  name: 'Meta' },
     { symbol: 'TSLA',  name: 'Tesla' },
     { symbol: 'AMD',   name: 'AMD' },
-    { symbol: 'NFLX',  name: 'Netflix' },
+    { symbol: 'INTC',  name: 'Intel' },
     { symbol: 'AVGO',  name: 'Broadcom' },
-    { symbol: 'JPM',   name: 'JPMorgan Chase' },
-    { symbol: 'BAC',   name: 'Bank of America' },
-    { symbol: 'GS',    name: 'Goldman Sachs' },
-    { symbol: 'V',     name: 'Visa' },
-    { symbol: 'XOM',   name: 'ExxonMobil' },
-    { symbol: 'WMT',   name: 'Walmart' },
+    { symbol: 'QCOM',  name: 'Qualcomm' },
+    { symbol: 'MU',    name: 'Micron Technology' },
+    { symbol: 'ORCL',  name: 'Oracle' },
+    { symbol: 'CRM',   name: 'Salesforce' },
+    { symbol: 'ADBE',  name: 'Adobe' },
+    { symbol: 'NOW',   name: 'ServiceNow' },
+    { symbol: 'SNOW',  name: 'Snowflake' },
+    { symbol: 'PLTR',  name: 'Palantir' },
     { symbol: 'COIN',  name: 'Coinbase' },
     { symbol: 'MSTR',  name: 'MicroStrategy' },
+    // Financials
+    { symbol: 'JPM',   name: 'JPMorgan Chase' },
+    { symbol: 'GS',    name: 'Goldman Sachs' },
+    { symbol: 'MS',    name: 'Morgan Stanley' },
+    { symbol: 'BAC',   name: 'Bank of America' },
+    { symbol: 'V',     name: 'Visa' },
+    { symbol: 'MA',    name: 'Mastercard' },
+    { symbol: 'PYPL',  name: 'PayPal' },
+    { symbol: 'BRK-B', name: 'Berkshire Hathaway' },
+    // Consumer / Retail
+    { symbol: 'WMT',   name: 'Walmart' },
+    { symbol: 'HD',    name: 'Home Depot' },
+    { symbol: 'COST',  name: 'Costco' },
+    { symbol: 'TGT',   name: 'Target' },
+    { symbol: 'NKE',   name: 'Nike' },
+    { symbol: 'MCD',   name: "McDonald's" },
+    { symbol: 'SBUX',  name: 'Starbucks' },
+    // Healthcare
+    { symbol: 'JNJ',   name: 'Johnson & Johnson' },
+    { symbol: 'UNH',   name: 'UnitedHealth' },
+    { symbol: 'PFE',   name: 'Pfizer' },
+    { symbol: 'ABBV',  name: 'AbbVie' },
+    { symbol: 'LLY',   name: 'Eli Lilly' },
+    { symbol: 'MRK',   name: 'Merck' },
+    // Energy / Industrials
+    { symbol: 'XOM',   name: 'ExxonMobil' },
+    { symbol: 'CVX',   name: 'Chevron' },
+    { symbol: 'BA',    name: 'Boeing' },
+    { symbol: 'CAT',   name: 'Caterpillar' },
+    { symbol: 'GE',    name: 'GE Aerospace' },
+    // High volatility / retail favorites
+    { symbol: 'NFLX',  name: 'Netflix' },
+    { symbol: 'DIS',   name: 'Disney' },
+    { symbol: 'UBER',  name: 'Uber' },
+    { symbol: 'RIVN',  name: 'Rivian' },
+    { symbol: 'SOFI',  name: 'SoFi Technologies' },
 ];
 
 const TICKER_NAMES = {};
@@ -1052,7 +1096,7 @@ async function getPrediction() {
         const infoRows = document.getElementById('info-rows');
         const rsiLine  = data.rsi  != null ? `<div class="info-row"><span class="info-label">RSI (14)</span><span class="info-value">${data.rsi}</span></div>` : '';
         const macdLine = data.macd != null ? `<div class="info-row"><span class="info-label">MACD</span><span class="info-value">${data.macd}</span></div>` : '';
-        const vixLine  = data.vix_close != null ? `<div class="info-row"><span class="info-label">VIX</span><span class="info-value">${data.vix_close}</span></div>` : '';
+        const vixLine  = data.vix_close != null ? `<div class="info-row"><span class="info-label">Mkt VIX (S&P 500)</span><span class="info-value">${data.vix_close}</span></div>` : '';
         const oobLine  = data.oob_score   != null ? `<div class="info-row"><span class="info-label">OOB Score</span><span class="info-value">${data.oob_score}%</span></div>` : '';
         const fitLine  = data.fit_score   != null ? `<div class="info-row"><span class="info-label">In-Sample Fit (R²)</span><span class="info-value">${data.fit_score}%</span></div>` : '';
         const ivLine   = data.implied_vol != null ? `<div class="info-row"><span class="info-label">Implied Vol ATM</span><span class="info-value">${data.implied_vol}%</span></div>` : '';
@@ -1076,7 +1120,16 @@ async function getPrediction() {
 }
 
 // ── EDGE WATCHLIST SCREENER ───────────────────────────────
-const SCREENER_TICKERS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'TSLA', 'AMZN', 'META'];
+const SCREENER_TICKERS = [
+    'AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA','AMD','INTC','AVGO',
+    'QCOM','MU','ORCL','CRM','ADBE','NOW','SNOW','PLTR','COIN','MSTR',
+    'JPM','GS','MS','BAC','V','MA','PYPL','BRK-B',
+    'WMT','HD','COST','TGT','NKE','MCD','SBUX',
+    'JNJ','UNH','PFE','ABBV','LLY','MRK',
+    'XOM','CVX','BA','CAT','GE',
+    'NFLX','DIS','UBER','RIVN','SOFI',
+    'SPY','QQQ','IWM','DIA','GLD','SLV','XLF','XLE','XLK','ARKK',
+];
 const SCREENER_LS_TTL  = 60 * 60 * 1000; // 1 hour client-side TTL
 let _screenerScanning = false;
 let _screenerResults  = [];
@@ -1211,8 +1264,8 @@ async function scanScreener(force = false) {
         }
     }
 
-    // 2 in flight at a time. Render free tier struggles with more.
-    await Promise.all([worker(), worker()]);
+    // 3 in flight at a time — Standard tier has the CPU headroom.
+    await Promise.all([worker(), worker(), worker()]);
 
     _screenerScanning = false;
     // Always persist under the scan's own key, even if user changed settings

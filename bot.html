@@ -314,10 +314,10 @@
 
     <!-- Watchlist -->
     <div class="card">
-        <div class="card-title">Scan Watchlist (32 symbols, twice daily Mon–Fri)</div>
+        <div class="card-title">Scan Watchlist (60 symbols, three times daily Mon–Fri)</div>
         <div class="watchlist-chips" id="watchlist-chips"></div>
         <div style="margin-top:0.75rem; font-size:0.72rem; color:#8b949e;">
-            Scans run at <strong style="color:#c9d1d9;">9:35 AM ET</strong> and <strong style="color:#c9d1d9;">3:55 PM ET</strong> on market days.
+            Scans run at <strong style="color:#c9d1d9;">9:35 AM ET</strong>, <strong style="color:#c9d1d9;">12:30 PM ET</strong>, and <strong style="color:#c9d1d9;">3:55 PM ET</strong> on market days.
             Criteria: 1-day requires DA ≥ 60% + Strong conviction; 3–5-day requires DA ≥ 55%; 10–21-day requires DA ≥ 52%.
         </div>
     </div>
@@ -332,9 +332,13 @@
 
     const WATCHLIST = [
         "AAPL","MSFT","GOOGL","AMZN","NVDA","META","TSLA","AMD","INTC","AVGO",
-        "QCOM","MU","JPM","V","MA","GS","WMT","HD","PG","KO",
-        "JNJ","UNH","NFLX","CRM","PLTR","COIN",
-        "SPY","QQQ","IWM","GLD","XLF","XLE",
+        "QCOM","MU","ORCL","CRM","ADBE","NOW","SNOW","PLTR","COIN","MSTR",
+        "JPM","GS","MS","BAC","V","MA","PYPL","BRK-B",
+        "WMT","HD","COST","TGT","NKE","MCD","SBUX",
+        "JNJ","UNH","PFE","ABBV","LLY","MRK",
+        "XOM","CVX","BA","CAT","GE",
+        "NFLX","DIS","UBER","RIVN","SOFI",
+        "SPY","QQQ","IWM","DIA","GLD","SLV","XLF","XLE","XLK","ARKK",
     ];
 
     let allClosed = [];
@@ -488,7 +492,7 @@
         wrap.style.display = 'block';
         bar.style.width = '0%';
 
-        const total    = WATCHLIST.length;  // 32
+        const total    = WATCHLIST.length;  // 60
         const duration = total * 7500;      // ~7.5s per ticker estimate
         const start    = Date.now();
 
