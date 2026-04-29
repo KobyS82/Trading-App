@@ -391,8 +391,9 @@ def _scan_ticker(symbol: str, vix_data: pd.DataFrame) -> list:
 
             if conviction not in h_cfg["convictions"]:
                 continue
-            if _open_trade_exists(symbol, horizon_days):
-                continue
+            # Removing for now. Want to track all data that can be used for p/l 
+            # if _open_trade_exists(symbol, horizon_days):
+                # continue
 
             trades.append({
                 "symbol":          symbol,
@@ -404,6 +405,17 @@ def _scan_ticker(symbol: str, vix_data: pd.DataFrame) -> list:
                 "da_score":        da,
                 "stop_loss_pct":   h_cfg["stop"],
                 "take_profit_pct": h_cfg["target"],
+            })
+            # Log qualifying bot signals to predictions table for public track record
+            _log_to_supabase({
+                "symbol":               symbol,
+                "model_used":           "LightGBM",
+                "horizon_days":         horizon_days,
+                "signal":               "BUY" if pred_val > 0 else "SELL",
+                "conviction":           conviction,
+                "predicted_change_pct": round(pred_val, 3),
+                "current_price":        price_val,
+                "directional_accuracy": da,
             })
 
     except Exception as exc:
@@ -779,9 +791,8 @@ def get_prediction(
 
     _predict_cache[cache_key] = (time.time(), response)
 
-    # Log to Supabase in the background (non-blocking, skips scanner calls)
-    if source != "screener":
-        background_tasks.add_task(_log_to_supabase, response)
+    # Log all predictions to Supabase — screener and web both tracked
+    background_tasks.add_task(_log_to_supabase, response)
 
     return response
 
@@ -864,7 +875,7 @@ def get_logs(limit: int = 100):
                 params={
                     "select": "*",
                     "order":  "logged_at.desc",
-                    "limit":  str(min(limit, 500)),
+                    "limit":  str(min(limit, 2000)),
                 },
             )
         return {"logs": resp.json()}

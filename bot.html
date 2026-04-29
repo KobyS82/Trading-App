@@ -310,6 +310,7 @@
                 </tbody>
             </table>
         </div>
+        <div id="pagination"></div>
     </div>
 
     <!-- Watchlist -->
@@ -406,14 +407,23 @@
         `).join('');
     }
 
+    const PAGE_SIZE = 25;
+    let currentPage = 1;
+
     function renderClosedTrades(trades) {
         const tbody = document.getElementById('closed-tbody');
         const filtered = currentFilter === 'all' ? trades : trades.filter(t => t.close_reason === currentFilter);
         if (!filtered.length) {
             tbody.innerHTML = '<tr class="empty-row"><td colspan="11">No trades match this filter</td></tr>';
+            document.getElementById('pagination').innerHTML = '';
             return;
         }
-        tbody.innerHTML = filtered.map(t => {
+        const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+        currentPage = Math.min(currentPage, totalPages);
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const paged = filtered.slice(start, start + PAGE_SIZE);
+
+        tbody.innerHTML = paged.map(t => {
             const reason = reasonLabel(t.close_reason);
             return `
             <tr>
@@ -430,6 +440,24 @@
                 <td style="color:#8b949e;">${fmtDate(t.closed_at)}</td>
             </tr>`;
         }).join('');
+
+        // Pagination controls
+        const pag = document.getElementById('pagination');
+        if (totalPages <= 1) { pag.innerHTML = ''; return; }
+        let html = `<div style="display:flex;gap:0.4rem;align-items:center;justify-content:flex-end;margin-top:0.75rem;font-size:0.78rem;">`;
+        html += `<span style="color:#8b949e;">${filtered.length} trades · Page ${currentPage}/${totalPages}</span>`;
+        html += `<button class="btn" style="padding:0.25rem 0.6rem;" ${currentPage === 1 ? 'disabled' : ''} onclick="goPage(${currentPage - 1})">‹</button>`;
+        for (let p = Math.max(1, currentPage-2); p <= Math.min(totalPages, currentPage+2); p++) {
+            html += `<button class="btn ${p === currentPage ? 'primary' : ''}" style="padding:0.25rem 0.6rem;" onclick="goPage(${p})">${p}</button>`;
+        }
+        html += `<button class="btn" style="padding:0.25rem 0.6rem;" ${currentPage === totalPages ? 'disabled' : ''} onclick="goPage(${currentPage + 1})">›</button>`;
+        html += `</div>`;
+        pag.innerHTML = html;
+    }
+
+    function goPage(p) {
+        currentPage = p;
+        renderClosedTrades(allClosed);
     }
 
     function renderSummary(summary) {
@@ -450,6 +478,7 @@
 
     function setFilter(f) {
         currentFilter = f;
+        currentPage = 1;
         document.querySelectorAll('.tab').forEach(tab => {
             tab.classList.toggle('active', tab.dataset.filter === f);
         });
@@ -459,7 +488,7 @@
     async function loadAll() {
         setStatus('Refreshing...');
         try {
-            const res  = await fetch(`${API}/paper-trades?limit=200`);
+            const res  = await fetch(`${API}/paper-trades?limit=1000`);
             const data = await res.json();
 
             if (data.error) { setStatus('Error: ' + data.error, 'err'); return; }
