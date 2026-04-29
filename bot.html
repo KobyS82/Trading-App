@@ -240,6 +240,15 @@
             <button class="btn" onclick="loadAll()">⟳ Refresh</button>
             <span class="status-msg" id="status-msg">Loading...</span>
         </div>
+        <div id="scan-progress-wrap" style="display:none; margin-top:0.75rem;">
+            <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:#8b949e; margin-bottom:0.35rem;">
+                <span id="scan-progress-label">Scanning...</span>
+                <span id="scan-progress-pct">0%</span>
+            </div>
+            <div style="background:#21262d; border-radius:4px; height:6px; overflow:hidden;">
+                <div id="scan-progress-bar" style="height:100%; width:0%; background:#1f6feb; border-radius:4px; transition:width 0.4s ease;"></div>
+            </div>
+        </div>
     </div>
 
     <!-- Open Positions -->
@@ -469,13 +478,49 @@
     async function triggerScan() {
         const btn = event.target;
         btn.disabled = true;
-        setStatus('Scan started — takes ~4 min to run through all tickers...');
+        setStatus('Scan started...');
+
+        // Show progress bar
+        const wrap  = document.getElementById('scan-progress-wrap');
+        const bar   = document.getElementById('scan-progress-bar');
+        const label = document.getElementById('scan-progress-label');
+        const pct   = document.getElementById('scan-progress-pct');
+        wrap.style.display = 'block';
+        bar.style.width = '0%';
+
+        const total    = WATCHLIST.length;  // 32
+        const duration = total * 7500;      // ~7.5s per ticker estimate
+        const start    = Date.now();
+
+        // Animate progress bar across estimated scan duration
+        const interval = setInterval(() => {
+            const elapsed  = Date.now() - start;
+            const progress = Math.min(elapsed / duration * 100, 95); // cap at 95 until done
+            const ticker   = Math.min(Math.floor(elapsed / 7500), total - 1);
+            bar.style.width   = progress.toFixed(1) + '%';
+            pct.textContent   = progress.toFixed(0) + '%';
+            label.textContent = `Scanning ${WATCHLIST[ticker]} (${ticker + 1}/${total})...`;
+        }, 500);
+
         try {
             const res  = await fetch(`${API}/scan-now`, { method: 'POST' });
             const data = await res.json();
             setStatus(`Scan running in background (${data.watchlist_size} tickers)`, 'ok');
-            setTimeout(loadAll, 8000);
+
+            // Wait estimated duration then finish up
+            const remaining = Math.max(0, duration - (Date.now() - start));
+            setTimeout(async () => {
+                clearInterval(interval);
+                bar.style.width   = '100%';
+                pct.textContent   = '100%';
+                label.textContent = 'Scan complete';
+                await loadAll();
+                setTimeout(() => { wrap.style.display = 'none'; }, 2000);
+            }, remaining);
+
         } catch (e) {
+            clearInterval(interval);
+            wrap.style.display = 'none';
             setStatus('Scan request failed', 'err');
         } finally {
             btn.disabled = false;

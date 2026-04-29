@@ -246,23 +246,21 @@ def _insert_paper_trade(symbol, signal, horizon_days, entry_price, predicted_pct
         print(f"[bot] Insert failed {symbol}: {exc}")
 
 
-def _scan_ticker(symbol: str) -> list:
+def _scan_ticker(symbol: str, vix_data: pd.DataFrame) -> list:
     """Download data once for a ticker, evaluate 1/3/5-day horizons, return qualifying trades."""
+    import gc
     trades = []
     try:
         stock = yf.download(symbol, period="max", progress=False, auto_adjust=True).tail(2500)
-        vix   = yf.download("^VIX", period="5y",  progress=False, auto_adjust=True).tail(2500)
 
         if isinstance(stock.columns, pd.MultiIndex):
             stock.columns = stock.columns.get_level_values(0)
-        if isinstance(vix.columns, pd.MultiIndex):
-            vix.columns = vix.columns.get_level_values(0)
 
         if len(stock) < 300:
             return trades
 
-        stock["VIX_Close"]  = vix["Close"]
-        stock["VIX_Change"] = vix["Close"].pct_change() * 100
+        stock["VIX_Close"]  = vix_data["Close"]
+        stock["VIX_Change"] = vix_data["Close"].pct_change() * 100
 
         stock["SMA_50"]           = stock["Close"].rolling(50).mean()
         stock["Today_Pct_Change"] = stock["Close"].pct_change() * 100
@@ -389,6 +387,12 @@ def _scan_ticker(symbol: str) -> list:
 
     except Exception as exc:
         print(f"[bot] Scan error {symbol}: {exc}")
+    finally:
+        try:
+            del stock
+        except Exception:
+            pass
+        gc.collect()
 
     return trades
 
@@ -466,9 +470,13 @@ def auto_scan() -> dict:
     print(f"[bot] Auto-scan start {datetime.now(timezone.utc).isoformat()}")
     _check_paper_trades_job()
     entered = 0
+    # Download VIX once and reuse — saves 31 redundant downloads per scan
+    vix_data = yf.download("^VIX", period="5y", progress=False, auto_adjust=True).tail(2500)
+    if isinstance(vix_data.columns, pd.MultiIndex):
+        vix_data.columns = vix_data.columns.get_level_values(0)
     for symbol in SCAN_WATCHLIST:
         try:
-            for t in _scan_ticker(symbol):
+            for t in _scan_ticker(symbol, vix_data):
                 _insert_paper_trade(**t)
                 entered += 1
         except Exception as exc:
