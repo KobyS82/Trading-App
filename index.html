@@ -1331,9 +1331,10 @@ async function loadLiveLog() {
 
                 let outcomeHtml;
                 if (r.was_correct === null || r.was_correct === undefined) {
-                    const daysLeft = Math.ceil(r.horizon * 365 / 252) -
-                        Math.floor((Date.now() - new Date(r.logged_at)) / 86400000);
-                    outcomeHtml = `<span class="live-log-pending">~${Math.max(0, daysLeft)}d left</span>`;
+                    const calDaysTotal = Math.ceil(r.horizon * 365 / 252);
+                    const calDaysElapsed = Math.floor((Date.now() - new Date(r.logged_at)) / 86400000);
+                    const tradingDaysLeft = Math.max(0, Math.round((calDaysTotal - calDaysElapsed) * 252 / 365));
+                    outcomeHtml = `<span class="live-log-pending">~${tradingDaysLeft}td left</span>`;
                 } else {
                     const actSign  = r.actual_pct >= 0 ? '+' : '';
                     const actColor = r.actual_pct  >= 0 ? '#3fb950' : '#f85149';
