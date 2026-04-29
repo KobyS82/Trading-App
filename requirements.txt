@@ -7,3 +7,5 @@ lightgbm
 textblob
 httpx
 python-dotenv
+apscheduler
+pytz
