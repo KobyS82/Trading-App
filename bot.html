@@ -264,8 +264,17 @@
 
     <!-- Open Positions -->
     <div class="card">
-        <div class="card-title">Open Positions</div>
-        <div class="table-wrap">
+        <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-bottom:0.75rem;">
+            <div class="card-title" style="margin:0;">Open Positions <span id="open-count" style="color:#58a6ff;font-weight:700;"></span></div>
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <select id="open-limit" onchange="renderOpenTrades(lastOpenTrades)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:0.2rem 0.5rem;font-size:0.75rem;cursor:pointer;">
+                    <option value="25">25 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="0">All</option>
+                </select>
+            </div>
+        </div>
+        <div class="table-wrap scrollable">
             <table>
                 <thead>
                     <tr>
@@ -286,6 +295,7 @@
                 </tbody>
             </table>
         </div>
+        <div id="open-row-count" style="font-size:0.72rem;color:#484f58;margin-top:0.5rem;text-align:right;"></div>
     </div>
 
     <!-- Closed Trades -->
@@ -404,13 +414,22 @@
         return { text: r || '—', cls: '' };
     }
 
+    let lastOpenTrades = [];
+
     function renderOpenTrades(trades) {
-        const tbody = document.getElementById('open-tbody');
+        lastOpenTrades = trades;
+        const tbody   = document.getElementById('open-tbody');
+        const counter = document.getElementById('open-row-count');
+        const badge   = document.getElementById('open-count');
+        if (badge) badge.textContent = `(${trades.length})`;
         if (!trades.length) {
             tbody.innerHTML = '<tr class="empty-row"><td colspan="10">No open positions</td></tr>';
+            if (counter) counter.textContent = '';
             return;
         }
-        tbody.innerHTML = trades.map(t => `
+        const limitVal = parseInt(document.getElementById('open-limit')?.value ?? '25');
+        const paged    = limitVal === 0 ? trades : trades.slice(0, limitVal);
+        tbody.innerHTML = paged.map(t => `
             <tr>
                 <td class="symbol-badge">${t.symbol}</td>
                 <td class="${t.signal === 'BUY' ? 'signal-buy' : 'signal-sell'}">${t.signal === 'BUY' ? '▲ BUY' : '▼ SELL'}</td>
@@ -424,6 +443,9 @@
                 <td style="color:#8b949e;">${fmtDate(t.opened_at)}</td>
             </tr>
         `).join('');
+        if (counter) counter.textContent = limitVal === 0
+            ? `Showing all ${trades.length} trades`
+            : `Showing ${paged.length} of ${trades.length} trades`;
     }
 
     let currentPage = 1;

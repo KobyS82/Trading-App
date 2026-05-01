@@ -918,7 +918,9 @@ def get_paper_trades(status: str = "all", limit: int = 100):
             "order":  "opened_at.desc",
             "limit":  str(min(limit, 500)),
         }
-        if status != "all":
+        if status == "all":
+            params["status"] = "neq.cancelled"   # hide cancelled unless explicitly requested
+        else:
             params["status"] = f"eq.{status}"
         with httpx.Client(timeout=8.0) as client:
             resp = client.get(
