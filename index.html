@@ -496,7 +496,8 @@
             <select id="model-select" onchange="onControlChange()">
                 <option value="linear">Linear Regression</option>
                 <option value="rf">Random Forest</option>
-                <option value="lgb" selected>LightGBM (Best)</option>
+                <option value="lgb" selected>LightGBM</option>
+                <option value="adaptive">Adaptive LGB (Ticker-Tuned)</option>
             </select>
             <select id="horizon-select" onchange="onControlChange()"></select>
         </div>
@@ -620,6 +621,7 @@
     <div class="footnotes">
         <p><strong>Directional Accuracy:</strong> walk-forward backtesting on data the model never saw (5 windows × ~80 days = 400 samples).
         <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only. Linear Regression is excluded because it is too simple to capture price dynamics reliably. Weak conviction is forced near earnings or Fed meetings regardless of accuracy. These are the two Machine Learning (ML) models; Linear Regression is a statistical baseline.</p>
+        <p><strong>Adaptive LGB</strong> uses mutual information scoring to select the 12 most predictive features out of 22 for each individual ticker before training. Different stocks respond to different signals — NVDA may be driven by momentum while a utility stock is driven by mean-reversion — and dropping noisy features for a given ticker can improve directional accuracy at longer horizons.</p>
         <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only). <strong>IV</strong> = per-ticker ATM implied volatility from the nearest expiry options chain — this is specific to the stock you are viewing. <strong>Mkt VIX</strong> = the CBOE S&P 500 Volatility Index, a market-wide fear gauge — not specific to any individual ticker. VIX &gt; 20 = elevated broad market volatility / inflated options premiums across all stocks.</p>
         <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders, not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
     </div>
@@ -1121,12 +1123,25 @@ async function getPrediction() {
         const ivLine   = data.implied_vol != null ? `<div class="info-row"><span class="info-label">Implied Vol ATM</span><span class="info-value">${data.implied_vol}%</span></div>` : '';
         const earnLine = data.next_earnings ? `<div class="info-row"><span class="info-label">Next Earnings</span><span class="info-value">${data.next_earnings}</span></div>` : '';
 
+        const topFeatLine = data.top_features
+            ? `<div class="info-row" style="align-items:flex-start;">
+                 <span class="info-label" style="padding-top:2px;">Top Features</span>
+                 <span class="info-value" style="font-size:0.7rem;line-height:1.6;color:#8b949e;">
+                   ${data.top_features.map((f, i) => {
+                     const score = data.feature_mi_scores?.[f];
+                     const pct   = score != null ? ` <span style="color:#484f58;">(${score.toFixed(3)})</span>` : '';
+                     return `${i + 1}. ${f}${pct}`;
+                   }).join('<br>')}
+                 </span>
+               </div>`
+            : '';
+
         infoRows.innerHTML = `
-            <div class="info-row"><span class="info-label">Model</span><span class="info-value">${data.model_used}</span></div>
+            <div class="info-row"><span class="info-label">Model</span><span class="info-value">${data.model_used}${data.model_version ? ` <span style="color:#484f58;font-size:0.7rem;">(${data.model_version})</span>` : ''}</span></div>
             <div class="info-row"><span class="info-label">Training Rows</span><span class="info-value">${data.training_rows.toLocaleString()} days</span></div>
             <div class="info-row"><span class="info-label">Data Range</span><span class="info-value">${data.training_start} → ${data.training_end}</span></div>
-            <div class="info-row"><span class="info-label">Features Used</span><span class="info-value">${data.features_used}</span></div>
-            ${rsiLine}${macdLine}${vixLine}${ivLine}${earnLine}${fitLine}${oobLine}
+            <div class="info-row"><span class="info-label">Features Used</span><span class="info-value">${data.features_used} of 22</span></div>
+            ${topFeatLine}${rsiLine}${macdLine}${vixLine}${ivLine}${earnLine}${fitLine}${oobLine}
         `;
 
     } catch (err) {
@@ -1184,7 +1199,7 @@ function renderScreener() {
     if (settingsEl) {
         const m = document.getElementById('model-select').value;
         const h = document.getElementById('horizon-select').value;
-        const mLabel = m === 'lgb' ? 'LightGBM' : m === 'rf' ? 'Rand. Forest' : 'Linear';
+        const mLabel = m === 'lgb' ? 'LightGBM' : m === 'rf' ? 'Rand. Forest' : m === 'adaptive' ? 'Adaptive LGB' : 'Linear';
         settingsEl.textContent = `${mLabel} · ${h} DTE`;
     }
 

@@ -15,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 import pytz
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.feature_selection import mutual_info_regression
 from lightgbm import LGBMRegressor
 from textblob import TextBlob
 
@@ -62,6 +63,7 @@ def _log_to_supabase(data: dict, source: str = "web") -> None:
         payload = {
             "symbol":               data["symbol"],
             "model":                data["model_used"],
+            "model_version":        data.get("model_version", "v1"),
             "horizon":              data["horizon_days"],
             "signal":               data["signal"],
             "conviction":           data["conviction"],
@@ -145,19 +147,45 @@ def is_near_fomc(days_window=3):
     return any(abs((f - today).days) <= days_window for f in FOMC_DATES)
 
 
+# Bump the version string for a model whenever its features or hyperparameters change
+# so historical predictions remain comparable to each other within a version.
+# v1 = original 22-feature set (launched 2026-04)
+MODEL_VERSIONS: dict = {
+    "lgb":      "v1",
+    "rf":       "v1",
+    "linear":   "v1",
+    "adaptive": "v1",  # v1 = MI top-12 of 22 features (launched 2026-05)
+}
+
+
 def build_model(name: str):
     if name == "rf":
         return RandomForestRegressor(
             n_estimators=200, random_state=42, oob_score=True,
             max_depth=6, min_samples_leaf=5, max_features="sqrt"
         ), "Random Forest"
-    if name == "lgb":
+    if name in ("lgb", "adaptive"):
         return LGBMRegressor(
             n_estimators=300, max_depth=4, learning_rate=0.05,
             subsample=0.8, subsample_freq=1, colsample_bytree=0.8,
             random_state=42, n_jobs=1, verbose=-1
-        ), "LightGBM"
+        ), ("Adaptive LGB" if name == "adaptive" else "LightGBM")
     return LinearRegression(), "Linear Regression"
+
+
+_ADAPTIVE_TOP_K = 12  # keep top-12 of 22 features per ticker
+
+
+def _select_features(train_data: pd.DataFrame, all_features: list, target_col: str) -> tuple:
+    """Rank features by mutual information with the target for this specific ticker's data.
+    Returns (selected_features_list, scores_dict) sorted descending by MI score."""
+    X = train_data[all_features].fillna(0).values
+    y = train_data[target_col].values
+    mi = mutual_info_regression(X, y, random_state=42, n_neighbors=5)
+    ranked = sorted(zip(all_features, mi), key=lambda t: t[1], reverse=True)
+    selected = [f for f, _ in ranked[:_ADAPTIVE_TOP_K]]
+    scores = {f: round(float(s), 4) for f, s in ranked}
+    return selected, scores
 
 
 _ROLLING_TRAIN_WINDOW = 1000  # ~4 years; keeps the model in the current regime
@@ -247,7 +275,8 @@ def _trade_exists_today(symbol: str, horizon_days: int) -> bool:
 
 
 def _insert_paper_trade(symbol, signal, horizon_days, entry_price, predicted_pct,
-                        conviction, da_score, stop_loss_pct, take_profit_pct) -> None:
+                        conviction, da_score, stop_loss_pct, take_profit_pct,
+                        model_ver: str = "v1") -> None:
     if not SUPABASE_URL or not SUPABASE_KEY:
         return
     try:
@@ -266,6 +295,7 @@ def _insert_paper_trade(symbol, signal, horizon_days, entry_price, predicted_pct
                     "da_score":        da_score,
                     "stop_loss_pct":   stop_loss_pct,
                     "take_profit_pct": take_profit_pct,
+                    "model_version":   model_ver,
                     "status":          "open",
                 },
             )
@@ -411,11 +441,13 @@ def _scan_ticker(symbol: str, vix_data: pd.DataFrame) -> list:
                 "da_score":        da,
                 "stop_loss_pct":   h_cfg["stop"],
                 "take_profit_pct": h_cfg["target"],
+                "model_ver":       MODEL_VERSIONS["lgb"],
             })
             # Log qualifying bot signals to predictions table for public track record
             _log_to_supabase({
                 "symbol":               symbol,
                 "model_used":           "LightGBM",
+                "model_version":        MODEL_VERSIONS["lgb"],
                 "horizon_days":         horizon_days,
                 "signal":               "BUY" if pred_val > 0 else "SELL",
                 "conviction":           conviction,
@@ -691,7 +723,7 @@ def get_prediction(
 
     train_data = stock.dropna().copy()
 
-    features = [
+    all_features = [
         'SMA_50', 'Today_Pct_Change', 'RSI', 'Vol_Change', 'Daily_Range',
         'Dist_From_200', 'MACD', 'Dist_BB_Upper', 'Day_Of_Week',
         'Lag_1', 'Lag_2', 'Gap_Pct',
@@ -701,6 +733,15 @@ def get_prediction(
         'Earnings_Flag',
         'News_Sentiment',
     ]
+
+    # --- ADAPTIVE FEATURE SELECTION ---
+    feature_mi_scores: dict = {}
+    if model == "adaptive":
+        features, feature_mi_scores = _select_features(
+            train_data, all_features, 'Target_Future_Pct'
+        )
+    else:
+        features = all_features
 
     # --- MAIN MODEL FIT ---
     ml_engine, model_name = build_model(model)
@@ -782,12 +823,15 @@ def get_prediction(
         "confidence":           directional_accuracy if directional_accuracy is not None else fit_score,
         "fit_score":            fit_score,
         "model_used":           model_name,
+        "model_version":        MODEL_VERSIONS.get(model, "v1"),
         # Info panel
         "training_rows":        num_training_rows,
         "training_start":       training_start,
         "training_end":         training_end,
         "oob_score":            oob_note,
         "features_used":        len(features),
+        "top_features":         features if model == "adaptive" else None,
+        "feature_mi_scores":    feature_mi_scores if model == "adaptive" else None,
         "news_sentiment":       news_sentiment,
         "headlines":            headlines,
         "implied_vol":          implied_vol,
