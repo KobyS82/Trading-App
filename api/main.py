@@ -908,6 +908,40 @@ def check_paper_trades_endpoint():
     return _check_paper_trades_job()
 
 
+@app.get("/leaderboard")
+def get_leaderboard(model: str = "lgb", horizon: int = 0):
+    """Return latest prediction per (symbol, horizon) sorted by directional accuracy."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {"error": "Supabase not configured", "entries": []}
+    try:
+        model_map = {"lgb": "LightGBM", "rf": "Random Forest", "linear": "Linear Regression"}
+        model_name = model_map.get(model, "LightGBM")
+        params = {
+            "select": "symbol,model,horizon,signal,conviction,predicted_pct,directional_accuracy,logged_at",
+            "model": f"eq.{model_name}",
+            "order": "logged_at.desc",
+            "limit": "10000",
+        }
+        if horizon:
+            params["horizon"] = f"eq.{horizon}"
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(
+                f"{SUPABASE_URL}/rest/v1/predictions",
+                headers=_sb_headers(),
+                params=params,
+            )
+        raw = resp.json() if isinstance(resp.json(), list) else []
+        seen: dict = {}
+        for row in raw:
+            key = (row.get("symbol"), row.get("horizon"))
+            if key not in seen:
+                seen[key] = row
+        entries = sorted(seen.values(), key=lambda x: x.get("directional_accuracy") or 0, reverse=True)
+        return {"entries": entries, "model": model_name}
+    except Exception as exc:
+        return {"error": str(exc), "entries": []}
+
+
 @app.get("/paper-trades")
 def get_paper_trades(status: str = "all", limit: int = 100):
     """Return paper trades. status filter: 'open', 'stop_loss', 'take_profit', 'expired', or 'all'."""

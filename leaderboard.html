@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>WalkForwardEdge — Accuracy Leaderboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #c9d1d9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 14px; min-height: 100vh; }
+
+  /* ── HEADER ── */
+  .page-header {
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+  .page-header h1 { font-size: 1rem; font-weight: 700; color: #e6edf3; flex: 1; min-width: 200px; }
+  .page-header h1 span { color: #58a6ff; }
+  .nav-link {
+    font-size: 0.75rem;
+    color: #8b949e;
+    text-decoration: none;
+    padding: 0.3rem 0.65rem;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+  }
+  .nav-link:hover { background: #21262d; color: #c9d1d9; text-decoration: none; }
+
+  /* ── BODY ── */
+  .page-body { max-width: 1100px; margin: 0 auto; padding: 1.25rem; }
+
+  /* ── CONTROLS ── */
+  .controls-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .controls-row label { font-size: 0.75rem; color: #8b949e; }
+  .ctrl-select {
+    background: #161b22;
+    border: 1px solid #30363d;
+    color: #c9d1d9;
+    border-radius: 6px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .ctrl-select:focus { outline: none; border-color: #58a6ff; }
+
+  .tab-bar { display: flex; gap: 0.35rem; }
+  .tab-btn {
+    padding: 0.3rem 0.7rem;
+    border-radius: 6px;
+    border: 1px solid #30363d;
+    background: transparent;
+    color: #8b949e;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .tab-btn.active { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+  .tab-btn:hover:not(.active) { background: #21262d; color: #c9d1d9; }
+
+  /* ── SUMMARY ── */
+  .summary-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .stat-card {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    padding: 0.65rem 1rem;
+    min-width: 120px;
+    text-align: center;
+  }
+  .stat-label { font-size: 0.68rem; color: #8b949e; margin-bottom: 0.2rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-value { font-size: 1.1rem; font-weight: 700; color: #e6edf3; }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    background: #161b22;
+    border: 1px solid #21262d;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .table-scroll { overflow-x: auto; max-height: calc(100vh - 260px); overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: #161b22;
+    z-index: 2;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #8b949e;
+    text-align: left;
+    border-bottom: 1px solid #21262d;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  thead th:hover { color: #c9d1d9; }
+  thead th.sort-asc::after  { content: ' ▲'; font-size: 0.6em; color: #58a6ff; }
+  thead th.sort-desc::after { content: ' ▼'; font-size: 0.6em; color: #58a6ff; }
+
+  tbody tr { border-bottom: 1px solid #21262d; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #1c2128; }
+  tbody td { padding: 0.55rem 0.85rem; vertical-align: middle; }
+
+  .rank-cell { color: #484f58; font-size: 0.7rem; font-weight: 600; }
+  a.sym-link { color: #58a6ff; text-decoration: none; font-weight: 700; font-size: 0.9rem; }
+  a.sym-link:hover { text-decoration: underline; }
+  .da-bar-wrap { display: flex; align-items: center; gap: 0.5rem; }
+  .da-bar-bg { flex: 1; background: #21262d; border-radius: 3px; height: 6px; max-width: 80px; }
+  .da-bar-fill { height: 6px; border-radius: 3px; transition: width 0.3s; }
+  .da-val { font-weight: 700; font-size: 0.85rem; min-width: 40px; }
+  .sig-buy  { color: #3fb950; font-weight: 700; }
+  .sig-sell { color: #f85149; font-weight: 700; }
+  .sig-hold { color: #8b949e; font-weight: 600; }
+  .conv-strong   { color: #3fb950; }
+  .conv-moderate { color: #d29922; }
+  .conv-weak     { color: #8b949e; }
+  .pred-pos { color: #3fb950; }
+  .pred-neg { color: #f85149; }
+  .pred-neu { color: #8b949e; }
+
+  /* ── EMPTY / LOADING ── */
+  .status-row { padding: 2.5rem; text-align: center; color: #484f58; font-size: 0.85rem; }
+  .spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid #30363d;
+    border-top-color: #58a6ff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── DA COLOR BANDS ── */
+  .da-great  { color: #3fb950; }
+  .da-good   { color: #58a6ff; }
+  .da-ok     { color: #d29922; }
+  .da-bad    { color: #f85149; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>WalkForwardEdge <span>/ Accuracy Leaderboard</span></h1>
+  <a class="nav-link" href="bot.html">⚡ Bot Dashboard</a>
+  <a class="nav-link" href="index.html">← Back to Signals</a>
+</div>
+
+<div class="page-body">
+
+  <!-- Controls -->
+  <div class="controls-row">
+    <div>
+      <label>Model&nbsp;</label>
+      <select class="ctrl-select" id="model-select" onchange="load()">
+        <option value="lgb">LightGBM</option>
+        <option value="rf">Random Forest</option>
+        <option value="linear">Linear</option>
+      </select>
+    </div>
+    <div class="tab-bar" id="horizon-tabs">
+      <button class="tab-btn active" data-h="0"    onclick="setHorizon(0)">All DTEs</button>
+      <button class="tab-btn"        data-h="1"    onclick="setHorizon(1)">1d</button>
+      <button class="tab-btn"        data-h="3"    onclick="setHorizon(3)">3d</button>
+      <button class="tab-btn"        data-h="5"    onclick="setHorizon(5)">EOW</button>
+      <button class="tab-btn"        data-h="10"   onclick="setHorizon(10)">Next Wk</button>
+      <button class="tab-btn"        data-h="21"   onclick="setHorizon(21)">21d</button>
+      <button class="tab-btn"        data-h="42"   onclick="setHorizon(42)">42d</button>
+      <button class="tab-btn"        data-h="63"   onclick="setHorizon(63)">63d</button>
+    </div>
+    <div style="margin-left:auto; font-size:0.72rem; color:#484f58;" id="last-updated"></div>
+  </div>
+
+  <!-- Summary Stats -->
+  <div class="summary-row" id="summary-row">
+    <div class="stat-card"><div class="stat-label">Tickers</div><div class="stat-value" id="stat-tickers">—</div></div>
+    <div class="stat-card"><div class="stat-label">Avg DA</div><div class="stat-value" id="stat-avg-da">—</div></div>
+    <div class="stat-card"><div class="stat-label">≥55% DA</div><div class="stat-value" id="stat-high-da">—</div></div>
+    <div class="stat-card"><div class="stat-label">BUY signals</div><div class="stat-value" id="stat-buys">—</div></div>
+    <div class="stat-card"><div class="stat-label">SELL signals</div><div class="stat-value" id="stat-sells">—</div></div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <div class="table-scroll">
+      <table id="lb-table">
+        <thead>
+          <tr>
+            <th class="rank-cell" style="cursor:default;">#</th>
+            <th data-col="symbol"               onclick="sortBy('symbol')">Symbol</th>
+            <th data-col="directional_accuracy"  onclick="sortBy('directional_accuracy')" class="sort-desc">DA%</th>
+            <th data-col="signal"               onclick="sortBy('signal')">Signal</th>
+            <th data-col="conviction"           onclick="sortBy('conviction')">Conviction</th>
+            <th data-col="predicted_pct"        onclick="sortBy('predicted_pct')">Pred%</th>
+            <th data-col="horizon"              onclick="sortBy('horizon')">DTE</th>
+            <th data-col="logged_at"            onclick="sortBy('logged_at')">Last Scanned</th>
+          </tr>
+        </thead>
+        <tbody id="lb-tbody">
+          <tr><td colspan="8" class="status-row"><span class="spinner"></span>Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:8000'
+    : 'https://trading-app-e0vy.onrender.com';
+
+  const CONV_RANK = { Strong: 3, Moderate: 2, Weak: 1 };
+  let _data     = [];
+  let _horizon  = 0;
+  let _sort     = { col: 'directional_accuracy', dir: -1 };
+
+  function setHorizon(h) {
+    _horizon = h;
+    document.querySelectorAll('#horizon-tabs .tab-btn').forEach(b => {
+      b.classList.toggle('active', +b.dataset.h === h);
+    });
+    load();
+  }
+
+  function sortBy(col) {
+    _sort = { col, dir: _sort.col === col ? -_sort.dir : (col === 'directional_accuracy' ? -1 : 1) };
+    render();
+  }
+
+  function _sortKey(row, col) {
+    if (col === 'conviction') return CONV_RANK[row.conviction] ?? 0;
+    if (col === 'directional_accuracy') return row.directional_accuracy ?? 0;
+    if (col === 'horizon') return row.horizon ?? 0;
+    if (col === 'predicted_pct') return row.predicted_pct ?? 0;
+    return (row[col] ?? '').toString().toLowerCase();
+  }
+
+  function daClass(da) {
+    if (da >= 60) return 'da-great';
+    if (da >= 55) return 'da-good';
+    if (da >= 50) return 'da-ok';
+    return 'da-bad';
+  }
+
+  function daBarColor(da) {
+    if (da >= 60) return '#3fb950';
+    if (da >= 55) return '#58a6ff';
+    if (da >= 50) return '#d29922';
+    return '#f85149';
+  }
+
+  function render() {
+    const sorted = [..._data].sort((a, b) => {
+      const va = _sortKey(a, _sort.col), vb = _sortKey(b, _sort.col);
+      return va < vb ? -_sort.dir : va > vb ? _sort.dir : 0;
+    });
+
+    // Update sort indicators
+    document.querySelectorAll('#lb-table thead th[data-col]').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.col === _sort.col) th.classList.add(_sort.dir === 1 ? 'sort-asc' : 'sort-desc');
+    });
+
+    // Stats
+    const avgDA = _data.length ? (_data.reduce((s, r) => s + (r.directional_accuracy || 0), 0) / _data.length) : 0;
+    const highDA = _data.filter(r => (r.directional_accuracy || 0) >= 55).length;
+    const buys  = _data.filter(r => r.signal === 'BUY').length;
+    const sells = _data.filter(r => r.signal === 'SELL').length;
+    document.getElementById('stat-tickers').textContent = _data.length;
+    document.getElementById('stat-avg-da').textContent  = _data.length ? avgDA.toFixed(1) + '%' : '—';
+    document.getElementById('stat-high-da').textContent = highDA;
+    document.getElementById('stat-buys').textContent    = buys;
+    document.getElementById('stat-sells').textContent   = sells;
+
+    if (!sorted.length) {
+      document.getElementById('lb-tbody').innerHTML =
+        `<tr><td colspan="8" class="status-row">No data found for this filter.</td></tr>`;
+      return;
+    }
+
+    const rows = sorted.map((r, i) => {
+      const da      = r.directional_accuracy ?? 0;
+      const barPct  = Math.min(100, Math.max(0, da));
+      const sigCls  = r.signal === 'BUY' ? 'sig-buy' : r.signal === 'SELL' ? 'sig-sell' : 'sig-hold';
+      const convCls = r.conviction === 'Strong' ? 'conv-strong' : r.conviction === 'Moderate' ? 'conv-moderate' : 'conv-weak';
+      const predVal = r.predicted_pct != null ? (r.predicted_pct >= 0 ? '+' : '') + r.predicted_pct.toFixed(2) + '%' : '—';
+      const predCls = r.predicted_pct == null ? 'pred-neu' : r.predicted_pct > 0 ? 'pred-pos' : r.predicted_pct < 0 ? 'pred-neg' : 'pred-neu';
+      const ts      = r.logged_at ? new Date(r.logged_at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+      return `<tr>
+        <td class="rank-cell">${i + 1}</td>
+        <td><a href="index.html?symbol=${r.symbol}" class="sym-link">${r.symbol}</a></td>
+        <td>
+          <div class="da-bar-wrap">
+            <div class="da-bar-bg"><div class="da-bar-fill" style="width:${barPct}%;background:${daBarColor(da)};"></div></div>
+            <span class="da-val ${daClass(da)}">${da.toFixed(1)}%</span>
+          </div>
+        </td>
+        <td class="${sigCls}">${r.signal ?? '—'}</td>
+        <td class="${convCls}">${r.conviction ?? '—'}</td>
+        <td class="${predCls}">${predVal}</td>
+        <td style="color:#8b949e;">${r.horizon ?? '—'}d</td>
+        <td style="color:#484f58; font-size:0.72rem;">${ts}</td>
+      </tr>`;
+    });
+    document.getElementById('lb-tbody').innerHTML = rows.join('');
+  }
+
+  async function load() {
+    document.getElementById('lb-tbody').innerHTML =
+      `<tr><td colspan="8" class="status-row"><span class="spinner"></span>Loading…</td></tr>`;
+    _data = [];
+
+    const model   = document.getElementById('model-select').value;
+    const params  = new URLSearchParams({ model });
+    if (_horizon) params.append('horizon', _horizon);
+
+    try {
+      const resp = await fetch(`${BASE_URL}/leaderboard?${params}`);
+      const json = await resp.json();
+      if (json.error) throw new Error(json.error);
+      _data = json.entries ?? [];
+      document.getElementById('last-updated').textContent =
+        'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) {
+      document.getElementById('lb-tbody').innerHTML =
+        `<tr><td colspan="8" class="status-row">Failed to load: ${e.message}</td></tr>`;
+      return;
+    }
+    render();
+  }
+
+  load();
+</script>
+</body>
+</html>
