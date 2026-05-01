@@ -226,9 +226,9 @@
 </div>
 
 <script>
-  const BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:8000'
-    : 'https://trading-app-e0vy.onrender.com';
+  const PROD_API = 'https://trading-app-api-3d6f.onrender.com';
+  const isLocal  = ['127.0.0.1', 'localhost'].includes(window.location.hostname);
+  const BASE_URL = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
 
   const CONV_RANK = { Strong: 3, Moderate: 2, Weak: 1 };
   let _data     = [];
