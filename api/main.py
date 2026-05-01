@@ -227,14 +227,13 @@ def walk_forward_directional_accuracy(train_data, features, target_col, model_na
 
 def get_consensus_directions(train_data, features, target_col, today_data,
                               selected_model, selected_pred):
-    """Fit all models (light settings for non-selected ones) and return direction dict.
-    When selected_model='adaptive', the LGB entry runs on the same MI-selected features
-    so it reflects the adaptive feature set rather than the full 22-feature baseline."""
-    # Use "Adaptive LGB" label for the LGB slot when running in adaptive mode
+    """Fit all models (light settings for non-selected ones).
+    Returns (directions_dict, predictions_dict) where predictions_dict has raw float values.
+    When selected_model='adaptive', the LGB entry runs on the same MI-selected features."""
     lgb_label = "Adaptive LGB" if selected_model == "adaptive" else "LightGBM"
-    results = {}
+    directions = {}
+    predictions = {}
     for name, label in [("linear", "Linear"), ("rf", "Random Forest"), ("lgb", lgb_label)]:
-        # "adaptive" and "lgb" are both served by the LGB slot above
         matches_selected = name == selected_model or (selected_model == "adaptive" and name == "lgb")
         if matches_selected:
             p = selected_pred
@@ -251,8 +250,9 @@ def get_consensus_directions(train_data, features, target_col, today_data,
             m = LinearRegression()
             m.fit(train_data[features], train_data[target_col])
             p = m.predict(today_data[features]).item()
-        results[label] = "up" if p >= 0 else "down"
-    return results
+        directions[label] = "up" if p >= 0 else "down"
+        predictions[label] = round(float(p), 4)
+    return directions, predictions
 
 
 def _trade_exists_today(symbol: str, horizon_days: int) -> bool:
@@ -768,7 +768,7 @@ def get_prediction(
     )
 
     # --- MODEL CONSENSUS ---
-    consensus_results = get_consensus_directions(
+    consensus_results, consensus_preds = get_consensus_directions(
         train_data, features, 'Target_Future_Pct', today_data, model, pred_val
     )
     primary_dir    = "up" if pred_val >= 0 else "down"
@@ -780,20 +780,28 @@ def get_prediction(
         if label in ("Random Forest", "LightGBM", "Adaptive LGB") and d == primary_dir
     )
 
-    # --- ADAPTIVE DIRECTION (4th arrow, always shown regardless of selected model) ---
-    # Run feature selection + lightweight LGB on the ticker-tuned feature set.
-    # Computed AFTER ml_agreeing so it doesn't inflate conviction for non-adaptive modes.
-    if model != "adaptive":
-        try:
+    # --- 4TH CONSENSUS ARROW (always shown, computed after ml_agreeing to not affect conviction) ---
+    # When running LGB/RF/Linear: add Adaptive LGB as extra signal.
+    # When running Adaptive: add baseline LightGBM (all 22 features) as extra signal.
+    # Neither extra arrow influences conviction — purely informational for the UI.
+    try:
+        if model != "adaptive":
             adapt_feats, _ = _select_features(train_data, all_features, 'Target_Future_Pct')
-            m_adapt = LGBMRegressor(n_estimators=100, learning_rate=0.05,
+            m_extra = LGBMRegressor(n_estimators=100, learning_rate=0.05,
                                     random_state=42, n_jobs=1, verbose=-1)
-            m_adapt.fit(train_data[adapt_feats], train_data['Target_Future_Pct'])
-            adapt_pred = m_adapt.predict(today_data[adapt_feats]).item()
-            consensus_results["Adaptive LGB"] = "up" if adapt_pred >= 0 else "down"
-            models_agreeing = sum(1 for d in consensus_results.values() if d == primary_dir)
-        except Exception:
-            pass  # non-critical — skip if feature selection fails
+            m_extra.fit(train_data[adapt_feats], train_data['Target_Future_Pct'])
+            extra_pred = m_extra.predict(today_data[adapt_feats]).item()
+            consensus_results["Adaptive LGB"] = "up" if extra_pred >= 0 else "down"
+        else:
+            # Show baseline LightGBM (full 22-feature) alongside adaptive
+            m_extra = LGBMRegressor(n_estimators=100, learning_rate=0.05,
+                                    random_state=42, n_jobs=1, verbose=-1)
+            m_extra.fit(train_data[all_features], train_data['Target_Future_Pct'])
+            extra_pred = m_extra.predict(today_data[all_features]).item()
+            consensus_results["LightGBM"] = "up" if extra_pred >= 0 else "down"
+        models_agreeing = sum(1 for d in consensus_results.values() if d == primary_dir)
+    except Exception:
+        pass  # non-critical — skip if extra model fails
 
     # --- SIGNAL + CONVICTION ---
     today_earnings = int(today_data['Earnings_Flag'].item())
@@ -868,8 +876,31 @@ def get_prediction(
 
     _predict_cache[cache_key] = (time.time(), response)
 
-    # Log all predictions for full model analysis (web, screener, bot scans)
+    # Log the selected model prediction
     background_tasks.add_task(_log_to_supabase, response, source)
+
+    # Log each consensus model separately so all 4 models accumulate real data.
+    # source="consensus" distinguishes these from direct user/bot selections.
+    _label_to_model_key = {
+        "LightGBM": "lgb", "Random Forest": "rf",
+        "Linear": "linear", "Adaptive LGB": "adaptive",
+    }
+    for cons_label, cons_pred_pct in consensus_preds.items():
+        if cons_label == model_name:
+            continue  # already logged above
+        cons_signal = "BUY" if cons_pred_pct > 0.05 else "SELL" if cons_pred_pct < -0.05 else "HOLD"
+        cons_model_key = _label_to_model_key.get(cons_label, "lgb")
+        background_tasks.add_task(_log_to_supabase, {
+            "symbol":               symbol.upper(),
+            "model_used":           cons_label,
+            "model_version":        MODEL_VERSIONS.get(cons_model_key, "v1"),
+            "horizon_days":         horizon,
+            "signal":               cons_signal,
+            "conviction":           conviction,  # same conviction context as the main call
+            "predicted_change_pct": round(cons_pred_pct, 3),
+            "current_price":        round(float(price_val), 2),
+            "directional_accuracy": directional_accuracy,
+        }, "consensus")
 
     return response
 

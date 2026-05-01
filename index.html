@@ -493,13 +493,16 @@
             <button class="go-btn" onclick="getPrediction()">Go</button>
         </div>
         <div class="select-row">
-            <select id="model-select" onchange="onControlChange()">
+            <select id="model-select" onchange="onControlChange(); document.getElementById('adaptive-note').style.display = this.value === 'adaptive' ? 'block' : 'none';">
                 <option value="linear">Linear Regression</option>
                 <option value="rf">Random Forest</option>
                 <option value="lgb" selected>LightGBM</option>
                 <option value="adaptive">Adaptive LGB (Ticker-Tuned)</option>
             </select>
             <select id="horizon-select" onchange="onControlChange()"></select>
+        </div>
+        <div id="adaptive-note" style="display:none; font-size:0.68rem; color:#d29922; margin-top:0.3rem; padding: 0 0.1rem;">
+            ⚠ Adaptive LGB generates signals only — not yet used for bot paper trades.
         </div>
     </div>
 

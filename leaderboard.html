@@ -168,50 +168,26 @@
 
 <div class="page-body">
 
-  <!-- Controls -->
-  <div class="controls-row">
-    <div>
-      <label>Model&nbsp;</label>
-      <select class="ctrl-select" id="model-select" onchange="load()">
-        <option value="lgb">LightGBM</option>
-        <option value="rf">Random Forest</option>
-        <option value="linear">Linear</option>
-        <option value="adaptive">Adaptive LGB</option>
-      </select>
+  <!-- ── MODEL HEAD-TO-HEAD (top, self-contained filters) ── -->
+  <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:0.85rem 1rem;margin-bottom:1.25rem;">
+    <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.6rem;flex-wrap:wrap;">
+      <span style="font-size:0.7rem;font-weight:700;color:#8b949e;text-transform:uppercase;letter-spacing:0.05em;">Model Head-to-Head</span>
+      <span style="font-size:0.68rem;color:#484f58;">— filter by conviction, DA, and horizon to compare all 4 models</span>
     </div>
-    <div class="tab-bar" id="horizon-tabs">
-      <button class="tab-btn active" data-h="0"    onclick="setHorizon(0)">All DTEs</button>
-      <button class="tab-btn"        data-h="1"    onclick="setHorizon(1)">1d</button>
-      <button class="tab-btn"        data-h="3"    onclick="setHorizon(3)">3d</button>
-      <button class="tab-btn"        data-h="5"    onclick="setHorizon(5)">EOW</button>
-      <button class="tab-btn"        data-h="10"   onclick="setHorizon(10)">Next Wk</button>
-      <button class="tab-btn"        data-h="21"   onclick="setHorizon(21)">21d</button>
-      <button class="tab-btn"        data-h="42"   onclick="setHorizon(42)">42d</button>
-      <button class="tab-btn"        data-h="63"   onclick="setHorizon(63)">63d</button>
-    </div>
-    <div style="margin-left:auto; font-size:0.72rem; color:#484f58;" id="last-updated"></div>
-  </div>
-
-  <!-- Model Comparison -->
-  <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:0.85rem 1rem;margin-bottom:1rem;">
-    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:0.75rem;">
-      <span style="font-size:0.7rem;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.04em;flex-shrink:0;">All Models — Head-to-Head</span>
-      <!-- Conviction filter -->
-      <select class="ctrl-select" id="cmp-conviction" onchange="loadComparison()" style="font-size:0.72rem;">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.75rem;">
+      <select class="ctrl-select" id="cmp-conviction" onchange="loadComparison()" style="font-size:0.72rem;" title="Filter by signal conviction">
         <option value="all">All Conviction</option>
         <option value="sm">Strong + Moderate</option>
         <option value="strong">Strong Only</option>
       </select>
-      <!-- Min DA filter -->
-      <select class="ctrl-select" id="cmp-min-da" onchange="loadComparison()" style="font-size:0.72rem;">
-        <option value="0">Any DA</option>
+      <select class="ctrl-select" id="cmp-min-da" onchange="loadComparison()" style="font-size:0.72rem;" title="Minimum directional accuracy threshold">
+        <option value="0">Any DA%</option>
         <option value="52">≥ 52% DA</option>
         <option value="55">≥ 55% DA</option>
         <option value="60">≥ 60% DA</option>
       </select>
-      <!-- Horizon filter -->
       <div class="tab-bar" id="cmp-horizon-tabs">
-        <button class="tab-btn active" data-h="0"  onclick="setCmpHorizon(0)">All</button>
+        <button class="tab-btn active" data-h="0"  onclick="setCmpHorizon(0)" title="All horizons">All</button>
         <button class="tab-btn"        data-h="1"  onclick="setCmpHorizon(1)">1d</button>
         <button class="tab-btn"        data-h="3"  onclick="setCmpHorizon(3)">3d</button>
         <button class="tab-btn"        data-h="5"  onclick="setCmpHorizon(5)">EOW</button>
@@ -220,12 +196,35 @@
         <button class="tab-btn"        data-h="42" onclick="setCmpHorizon(42)">42d</button>
         <button class="tab-btn"        data-h="63" onclick="setCmpHorizon(63)">63d</button>
       </div>
-      <!-- Quick preset -->
-      <button class="tab-btn" onclick="setBotConditions()" title="Strong+Moderate, ≥52% DA — matches bot entry criteria" style="margin-left:auto;border-color:#1f6feb;color:#58a6ff;">⚡ Bot Conditions</button>
+      <button class="tab-btn" onclick="setBotConditions()" title="Preset: Strong+Moderate conviction, ≥52% DA — exact bot entry criteria" style="margin-left:auto;border-color:#1f6feb;color:#58a6ff;flex-shrink:0;">⚡ Bot Conditions</button>
     </div>
     <div id="model-comparison-rows" style="display:flex;gap:0.75rem;flex-wrap:wrap;">
       <span style="color:#484f58;font-size:0.78rem;">Loading…</span>
     </div>
+  </div>
+
+  <!-- ── PER-TICKER TABLE CONTROLS (directly above the table) ── -->
+  <div class="controls-row">
+    <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+      <label style="font-size:0.7rem;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.04em;">Ticker Table</label>
+      <select class="ctrl-select" id="model-select" onchange="load()" title="Which model's predictions to show in the table below">
+        <option value="lgb">LightGBM</option>
+        <option value="rf">Random Forest</option>
+        <option value="linear">Linear</option>
+        <option value="adaptive">Adaptive LGB</option>
+      </select>
+      <div class="tab-bar" id="horizon-tabs">
+        <button class="tab-btn active" data-h="0"    onclick="setHorizon(0)">All DTEs</button>
+        <button class="tab-btn"        data-h="1"    onclick="setHorizon(1)">1d</button>
+        <button class="tab-btn"        data-h="3"    onclick="setHorizon(3)">3d</button>
+        <button class="tab-btn"        data-h="5"    onclick="setHorizon(5)">EOW</button>
+        <button class="tab-btn"        data-h="10"   onclick="setHorizon(10)">Next Wk</button>
+        <button class="tab-btn"        data-h="21"   onclick="setHorizon(21)">21d</button>
+        <button class="tab-btn"        data-h="42"   onclick="setHorizon(42)">42d</button>
+        <button class="tab-btn"        data-h="63"   onclick="setHorizon(63)">63d</button>
+      </div>
+    </div>
+    <div style="margin-left:auto; font-size:0.72rem; color:#484f58;" id="last-updated"></div>
   </div>
 
   <!-- Summary Stats -->
