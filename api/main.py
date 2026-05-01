@@ -1003,16 +1003,34 @@ def get_leaderboard(model: str = "lgb", horizon: int = 0):
 
 
 @app.get("/model-comparison")
-def get_model_comparison():
-    """Aggregate DA and outcome stats per model across all logged predictions."""
+def get_model_comparison(horizon: int = 0, conviction: str = "all", min_da: float = 0):
+    """Aggregate DA and outcome stats per model, with optional filters.
+
+    horizon:   0 = all horizons, else filter to that specific horizon (days)
+    conviction: 'all', 'sm' (Strong+Moderate), 'strong'
+    min_da:    minimum directional_accuracy threshold (e.g. 52, 55, 60)
+    """
     if not SUPABASE_URL or not SUPABASE_KEY:
         return {"error": "Supabase not configured", "models": []}
     try:
+        params: dict = {
+            "select": "model,directional_accuracy,was_correct,conviction,horizon",
+            "limit":  "50000",
+        }
+        if horizon:
+            params["horizon"] = f"eq.{horizon}"
+        if conviction == "strong":
+            params["conviction"] = "eq.Strong"
+        elif conviction == "sm":
+            params["conviction"] = "in.(Strong,Moderate)"
+        if min_da > 0:
+            params["directional_accuracy"] = f"gte.{min_da}"
+
         with httpx.Client(timeout=10.0) as client:
             resp = client.get(
                 f"{SUPABASE_URL}/rest/v1/predictions",
                 headers=_sb_headers(),
-                params={"select": "model,directional_accuracy,was_correct,model_version", "limit": "50000"},
+                params=params,
             )
         rows = resp.json() if isinstance(resp.json(), list) else []
         from collections import defaultdict
@@ -1025,18 +1043,28 @@ def get_model_comparison():
                 buckets[m]["resolved"] += 1
                 if r["was_correct"]:
                     buckets[m]["correct"] += 1
+        # Always emit all 4 known model slots so the UI cards are stable even if one has 0 predictions
+        known_order = ["LightGBM", "Random Forest", "Linear Regression", "Adaptive LGB"]
         result = []
-        for model_name, b in sorted(buckets.items()):
-            avg_da    = round(b["da_sum"] / b["total"], 1) if b["total"] else 0
-            win_rate  = round(b["correct"] / b["resolved"] * 100, 1) if b["resolved"] else None
+        for model_name in known_order:
+            b = buckets.get(model_name, {"total": 0, "da_sum": 0.0, "resolved": 0, "correct": 0})
+            avg_da   = round(b["da_sum"] / b["total"], 1) if b["total"] else None
+            win_rate = round(b["correct"] / b["resolved"] * 100, 1) if b["resolved"] else None
             result.append({
-                "model":      model_name,
-                "total":      b["total"],
-                "avg_da":     avg_da,
-                "resolved":   b["resolved"],
-                "win_rate":   win_rate,
+                "model":    model_name,
+                "total":    b["total"],
+                "avg_da":   avg_da,
+                "resolved": b["resolved"],
+                "win_rate": win_rate,
             })
-        return {"models": result}
+        # Append any unexpected model names from DB so nothing is silently dropped
+        for model_name, b in buckets.items():
+            if model_name not in known_order:
+                avg_da   = round(b["da_sum"] / b["total"], 1) if b["total"] else None
+                win_rate = round(b["correct"] / b["resolved"] * 100, 1) if b["resolved"] else None
+                result.append({"model": model_name, "total": b["total"], "avg_da": avg_da,
+                                "resolved": b["resolved"], "win_rate": win_rate})
+        return {"models": result, "filters": {"horizon": horizon, "conviction": conviction, "min_da": min_da}}
     except Exception as exc:
         return {"error": str(exc), "models": []}
 

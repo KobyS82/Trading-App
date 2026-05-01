@@ -193,9 +193,37 @@
   </div>
 
   <!-- Model Comparison -->
-  <div id="model-comparison" style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:0.85rem 1rem;margin-bottom:1rem;">
-    <div style="font-size:0.7rem;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.6rem;">All Models — Head-to-Head</div>
-    <div id="model-comparison-rows" style="display:flex;gap:1rem;flex-wrap:wrap;">
+  <div style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:0.85rem 1rem;margin-bottom:1rem;">
+    <div style="display:flex;align-items:center;flex-wrap:wrap;gap:0.6rem;margin-bottom:0.75rem;">
+      <span style="font-size:0.7rem;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.04em;flex-shrink:0;">All Models — Head-to-Head</span>
+      <!-- Conviction filter -->
+      <select class="ctrl-select" id="cmp-conviction" onchange="loadComparison()" style="font-size:0.72rem;">
+        <option value="all">All Conviction</option>
+        <option value="sm">Strong + Moderate</option>
+        <option value="strong">Strong Only</option>
+      </select>
+      <!-- Min DA filter -->
+      <select class="ctrl-select" id="cmp-min-da" onchange="loadComparison()" style="font-size:0.72rem;">
+        <option value="0">Any DA</option>
+        <option value="52">≥ 52% DA</option>
+        <option value="55">≥ 55% DA</option>
+        <option value="60">≥ 60% DA</option>
+      </select>
+      <!-- Horizon filter -->
+      <div class="tab-bar" id="cmp-horizon-tabs">
+        <button class="tab-btn active" data-h="0"  onclick="setCmpHorizon(0)">All</button>
+        <button class="tab-btn"        data-h="1"  onclick="setCmpHorizon(1)">1d</button>
+        <button class="tab-btn"        data-h="3"  onclick="setCmpHorizon(3)">3d</button>
+        <button class="tab-btn"        data-h="5"  onclick="setCmpHorizon(5)">EOW</button>
+        <button class="tab-btn"        data-h="10" onclick="setCmpHorizon(10)">10d</button>
+        <button class="tab-btn"        data-h="21" onclick="setCmpHorizon(21)">21d</button>
+        <button class="tab-btn"        data-h="42" onclick="setCmpHorizon(42)">42d</button>
+        <button class="tab-btn"        data-h="63" onclick="setCmpHorizon(63)">63d</button>
+      </div>
+      <!-- Quick preset -->
+      <button class="tab-btn" onclick="setBotConditions()" title="Strong+Moderate, ≥52% DA — matches bot entry criteria" style="margin-left:auto;border-color:#1f6feb;color:#58a6ff;">⚡ Bot Conditions</button>
+    </div>
+    <div id="model-comparison-rows" style="display:flex;gap:0.75rem;flex-wrap:wrap;">
       <span style="color:#484f58;font-size:0.78rem;">Loading…</span>
     </div>
   </div>
@@ -335,25 +363,61 @@
     document.getElementById('lb-tbody').innerHTML = rows.join('');
   }
 
+  let _cmpHorizon = 0;
+
+  function setCmpHorizon(h) {
+    _cmpHorizon = h;
+    document.querySelectorAll('#cmp-horizon-tabs .tab-btn').forEach(b => {
+      b.classList.toggle('active', +b.dataset.h === h);
+    });
+    loadComparison();
+  }
+
+  function setBotConditions() {
+    document.getElementById('cmp-conviction').value = 'sm';
+    document.getElementById('cmp-min-da').value = '52';
+    setCmpHorizon(0);  // all horizons — bot covers 1/3/5/10/21d so 'all' is most useful here
+  }
+
   async function loadComparison() {
+    const el = document.getElementById('model-comparison-rows');
+    el.innerHTML = '<span style="color:#484f58;font-size:0.78rem;">Loading…</span>';
     try {
-      const resp = await fetch(`${BASE_URL}/model-comparison`);
+      const conviction = document.getElementById('cmp-conviction').value;
+      const minDa      = document.getElementById('cmp-min-da').value;
+      const params     = new URLSearchParams({ conviction, min_da: minDa });
+      if (_cmpHorizon) params.append('horizon', _cmpHorizon);
+
+      const resp = await fetch(`${BASE_URL}/model-comparison?${params}`);
       const json = await resp.json();
-      const models = json.models ?? [];
-      if (!models.length) return;
-      const el = document.getElementById('model-comparison-rows');
+      const models = (json.models ?? []).filter(m => m.total > 0);
+
+      if (!models.length) {
+        el.innerHTML = '<span style="color:#484f58;font-size:0.78rem;">No predictions match this filter.</span>';
+        return;
+      }
+
       el.innerHTML = models.map(m => {
-        const daClass  = m.avg_da >= 55 ? '#3fb950' : m.avg_da >= 50 ? '#d29922' : '#f85149';
-        const wrText   = m.win_rate != null ? `${m.win_rate}% win rate (${m.resolved} outcomes)` : `${m.total} predictions, no outcomes yet`;
+        const daColor  = m.avg_da == null ? '#484f58' : m.avg_da >= 55 ? '#3fb950' : m.avg_da >= 50 ? '#d29922' : '#f85149';
+        const daText   = m.avg_da != null ? `${m.avg_da}%` : '—';
+        const wrText   = m.win_rate != null
+          ? `${m.win_rate}% win rate`
+          : m.resolved > 0 ? `${m.resolved} outcomes (calc error)` : 'No outcomes yet';
         const wrColor  = m.win_rate == null ? '#484f58' : m.win_rate >= 55 ? '#3fb950' : m.win_rate >= 45 ? '#d29922' : '#f85149';
-        return `<div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:0.5rem 0.75rem;min-width:160px;">
-          <div style="font-size:0.72rem;font-weight:700;color:#c9d1d9;margin-bottom:0.3rem;">${m.model}</div>
-          <div style="font-size:0.78rem;color:${daClass};font-weight:600;">Avg DA: ${m.avg_da}%</div>
-          <div style="font-size:0.7rem;color:${wrColor};margin-top:0.15rem;">${wrText}</div>
-          <div style="font-size:0.65rem;color:#484f58;margin-top:0.1rem;">${m.total.toLocaleString()} total predictions</div>
+        const resolvedNote = m.resolved > 0 ? `${m.resolved} of ${m.total.toLocaleString()} resolved` : `${m.total.toLocaleString()} predictions`;
+        return `<div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:0.6rem 0.85rem;min-width:170px;flex:1;max-width:240px;">
+          <div style="font-size:0.75rem;font-weight:700;color:#e6edf3;margin-bottom:0.4rem;">${m.model}</div>
+          <div style="display:flex;align-items:baseline;gap:0.4rem;margin-bottom:0.15rem;">
+            <span style="font-size:1rem;font-weight:700;color:${daColor};">${daText}</span>
+            <span style="font-size:0.68rem;color:#8b949e;">avg DA</span>
+          </div>
+          <div style="font-size:0.72rem;color:${wrColor};font-weight:600;margin-bottom:0.15rem;">${wrText}</div>
+          <div style="font-size:0.65rem;color:#484f58;">${resolvedNote}</div>
         </div>`;
       }).join('');
-    } catch (e) { /* silent */ }
+    } catch (e) {
+      el.innerHTML = `<span style="color:#484f58;font-size:0.78rem;">Failed to load: ${e.message}</span>`;
+    }
   }
 
   async function load() {
