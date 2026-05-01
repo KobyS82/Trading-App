@@ -23,12 +23,14 @@ _scan_lock = threading.Lock()
 load_dotenv()  # loads .env on local dev; no-op on Render (uses dashboard env vars)
 
 
+_ET = pytz.timezone("America/New_York")
+
 @asynccontextmanager
 async def lifespan(_app):
-    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=9,     minute=35))
-    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=12,    minute=30))
-    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=15,    minute=55))
-    _scheduler.add_job(_check_paper_trades_job, CronTrigger(day_of_week="mon-fri", hour="9-16",minute="*/30"))
+    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=9,     minute=35,    timezone=_ET))
+    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=12,    minute=30,    timezone=_ET))
+    _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=15,    minute=55,    timezone=_ET))
+    _scheduler.add_job(_check_paper_trades_job, CronTrigger(day_of_week="mon-fri", hour="9-16",minute="*/30",timezone=_ET))
     _scheduler.start()
     print("[scheduler] Started — scans at 09:35, 12:30, and 15:55 ET | outcomes checked every 30min 9-4 ET, Mon–Fri")
     yield
@@ -218,10 +220,14 @@ def get_consensus_directions(train_data, features, target_col, today_data,
     return results
 
 
-def _open_trade_exists(symbol: str, horizon_days: int) -> bool:
+def _trade_exists_today(symbol: str, horizon_days: int) -> bool:
+    """Block same symbol+horizon from being entered more than once per ET calendar day."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return False
     try:
+        now_et = datetime.now(_ET)
+        day_start = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_start_utc = day_start.astimezone(timezone.utc).isoformat()
         with httpx.Client(timeout=5.0) as client:
             resp = client.get(
                 f"{SUPABASE_URL}/rest/v1/paper_trades",
@@ -230,7 +236,7 @@ def _open_trade_exists(symbol: str, horizon_days: int) -> bool:
                     "select":       "id",
                     "symbol":       f"eq.{symbol}",
                     "horizon_days": f"eq.{horizon_days}",
-                    "status":       "eq.open",
+                    "opened_at":    f"gte.{day_start_utc}",
                     "limit":        "1",
                 },
             )
@@ -391,9 +397,8 @@ def _scan_ticker(symbol: str, vix_data: pd.DataFrame) -> list:
 
             if conviction not in h_cfg["convictions"]:
                 continue
-            # Removing for now. Want to track all data that can be used for p/l 
-            # if _open_trade_exists(symbol, horizon_days):
-                # continue
+            if _trade_exists_today(symbol, horizon_days):
+                continue
 
             trades.append({
                 "symbol":          symbol,
@@ -506,6 +511,7 @@ def auto_scan() -> dict:
         print(f"[bot] Auto-scan start {datetime.now(timezone.utc).isoformat()}")
         _check_paper_trades_job()
         entered = 0
+        inserted_this_run = set()  # guard against same symbol+horizon inserted twice in one scan
         # Download VIX once and reuse — saves 31 redundant downloads per scan
         vix_data = yf.download("^VIX", period="5y", progress=False, auto_adjust=True).tail(2500)
         if isinstance(vix_data.columns, pd.MultiIndex):
@@ -513,7 +519,11 @@ def auto_scan() -> dict:
         for symbol in SCAN_WATCHLIST:
             try:
                 for t in _scan_ticker(symbol, vix_data):
+                    key = (t["symbol"], t["horizon_days"])
+                    if key in inserted_this_run:
+                        continue
                     _insert_paper_trade(**t)
+                    inserted_this_run.add(key)
                     entered += 1
             except Exception as exc:
                 print(f"[bot] Error {symbol}: {exc}")

@@ -139,6 +139,17 @@
 
         /* ── TABLE ── */
         .table-wrap { overflow-x: auto; }
+        .table-wrap.scrollable {
+            max-height: 420px;
+            overflow-y: auto;
+            border-radius: 6px;
+        }
+        .table-wrap.scrollable thead th {
+            position: sticky;
+            top: 0;
+            background: #161b22;
+            z-index: 1;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -281,14 +292,22 @@
     <div class="card">
         <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.75rem; margin-bottom:0.75rem;">
             <div class="card-title" style="margin:0;">Trade History</div>
-            <div class="filter-tabs" id="filter-tabs">
-                <button class="tab active" data-filter="all"      onclick="setFilter('all')">All</button>
-                <button class="tab"        data-filter="take_profit" onclick="setFilter('take_profit')">Target Hit</button>
-                <button class="tab"        data-filter="stop_loss"   onclick="setFilter('stop_loss')">Stopped Out</button>
-                <button class="tab"        data-filter="expired"     onclick="setFilter('expired')">Expired</button>
+            <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                <div class="filter-tabs" id="filter-tabs" style="margin-bottom:0;">
+                    <button class="tab active" data-filter="all"         onclick="setFilter('all')">All</button>
+                    <button class="tab"        data-filter="take_profit" onclick="setFilter('take_profit')">Target Hit</button>
+                    <button class="tab"        data-filter="stop_loss"   onclick="setFilter('stop_loss')">Stopped Out</button>
+                    <button class="tab"        data-filter="expired"     onclick="setFilter('expired')">Expired</button>
+                </div>
+                <select id="row-limit" onchange="renderClosedTrades(allClosed)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:0.2rem 0.5rem;font-size:0.75rem;cursor:pointer;">
+                    <option value="25">25 rows</option>
+                    <option value="50">50 rows</option>
+                    <option value="100">100 rows</option>
+                    <option value="0">All</option>
+                </select>
             </div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap scrollable">
             <table>
                 <thead>
                     <tr>
@@ -310,7 +329,7 @@
                 </tbody>
             </table>
         </div>
-        <div id="pagination"></div>
+        <div id="row-count" style="font-size:0.72rem;color:#484f58;margin-top:0.5rem;text-align:right;"></div>
     </div>
 
     <!-- Watchlist -->
@@ -407,21 +426,27 @@
         `).join('');
     }
 
-    const PAGE_SIZE = 25;
     let currentPage = 1;
 
+    function getPageSize() {
+        const v = parseInt(document.getElementById('row-limit')?.value ?? '25');
+        return v === 0 ? Infinity : v;
+    }
+
     function renderClosedTrades(trades) {
-        const tbody = document.getElementById('closed-tbody');
+        const tbody   = document.getElementById('closed-tbody');
+        const counter = document.getElementById('row-count');
         const filtered = currentFilter === 'all' ? trades : trades.filter(t => t.close_reason === currentFilter);
         if (!filtered.length) {
             tbody.innerHTML = '<tr class="empty-row"><td colspan="11">No trades match this filter</td></tr>';
-            document.getElementById('pagination').innerHTML = '';
+            if (counter) counter.textContent = '';
             return;
         }
-        const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+        const pageSize   = getPageSize();
+        const totalPages = pageSize === Infinity ? 1 : Math.ceil(filtered.length / pageSize);
         currentPage = Math.min(currentPage, totalPages);
-        const start = (currentPage - 1) * PAGE_SIZE;
-        const paged = filtered.slice(start, start + PAGE_SIZE);
+        const start = pageSize === Infinity ? 0 : (currentPage - 1) * pageSize;
+        const paged = pageSize === Infinity ? filtered : filtered.slice(start, start + pageSize);
 
         tbody.innerHTML = paged.map(t => {
             const reason = reasonLabel(t.close_reason);
@@ -441,18 +466,17 @@
             </tr>`;
         }).join('');
 
-        // Pagination controls
-        const pag = document.getElementById('pagination');
-        if (totalPages <= 1) { pag.innerHTML = ''; return; }
-        let html = `<div style="display:flex;gap:0.4rem;align-items:center;justify-content:flex-end;margin-top:0.75rem;font-size:0.78rem;">`;
-        html += `<span style="color:#8b949e;">${filtered.length} trades · Page ${currentPage}/${totalPages}</span>`;
-        html += `<button class="btn" style="padding:0.25rem 0.6rem;" ${currentPage === 1 ? 'disabled' : ''} onclick="goPage(${currentPage - 1})">‹</button>`;
+        if (counter) counter.textContent = `Showing ${paged.length} of ${filtered.length} trades`;
+
+        // Pagination controls — only show when more than one page
+        const pag = document.getElementById('row-count');
+        if (totalPages <= 1 || pageSize === Infinity) return;
+        let pgHtml = ` · <button class="btn" style="padding:0.2rem 0.5rem;font-size:0.72rem;" ${currentPage===1?'disabled':''} onclick="goPage(${currentPage-1})">‹</button> `;
         for (let p = Math.max(1, currentPage-2); p <= Math.min(totalPages, currentPage+2); p++) {
-            html += `<button class="btn ${p === currentPage ? 'primary' : ''}" style="padding:0.25rem 0.6rem;" onclick="goPage(${p})">${p}</button>`;
+            pgHtml += `<button class="btn ${p===currentPage?'primary':''}" style="padding:0.2rem 0.5rem;font-size:0.72rem;" onclick="goPage(${p})">${p}</button> `;
         }
-        html += `<button class="btn" style="padding:0.25rem 0.6rem;" ${currentPage === totalPages ? 'disabled' : ''} onclick="goPage(${currentPage + 1})">›</button>`;
-        html += `</div>`;
-        pag.innerHTML = html;
+        pgHtml += `<button class="btn" style="padding:0.2rem 0.5rem;font-size:0.72rem;" ${currentPage===totalPages?'disabled':''} onclick="goPage(${currentPage+1})">›</button>`;
+        if (counter) counter.innerHTML = `Showing ${paged.length} of ${filtered.length} trades` + pgHtml;
     }
 
     function goPage(p) {
