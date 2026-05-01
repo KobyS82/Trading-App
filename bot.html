@@ -198,6 +198,11 @@
         .pnl-neg { color: #f85149; font-weight: 700; }
         .pnl-neu { color: #8b949e; }
 
+        thead th.sortable { cursor: pointer; user-select: none; }
+        thead th.sortable:hover { color: #c9d1d9; }
+        thead th.sort-asc::after  { content: ' ▲'; font-size: 0.6em; color: #58a6ff; }
+        thead th.sort-desc::after { content: ' ▼'; font-size: 0.6em; color: #58a6ff; }
+
         .empty-row td {
             text-align: center;
             color: #484f58;
@@ -278,16 +283,16 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Symbol</th>
-                        <th>Signal</th>
-                        <th>DTE</th>
-                        <th>Entry</th>
-                        <th>Stop</th>
-                        <th>Target</th>
-                        <th>Conviction</th>
-                        <th>DA</th>
-                        <th>Predicted</th>
-                        <th>Opened</th>
+                        <th class="sortable" data-col="symbol"          onclick="sortOpen('symbol')">Symbol</th>
+                        <th class="sortable" data-col="signal"          onclick="sortOpen('signal')">Signal</th>
+                        <th class="sortable" data-col="horizon_days"    onclick="sortOpen('horizon_days')">DTE</th>
+                        <th class="sortable" data-col="entry_price"     onclick="sortOpen('entry_price')">Entry</th>
+                        <th class="sortable" data-col="stop_loss_pct"   onclick="sortOpen('stop_loss_pct')">Stop</th>
+                        <th class="sortable" data-col="take_profit_pct" onclick="sortOpen('take_profit_pct')">Target</th>
+                        <th class="sortable" data-col="conviction"      onclick="sortOpen('conviction')">Conviction</th>
+                        <th class="sortable" data-col="da_score"        onclick="sortOpen('da_score')">DA</th>
+                        <th class="sortable" data-col="predicted_pct"   onclick="sortOpen('predicted_pct')">Predicted</th>
+                        <th class="sortable" data-col="opened_at"       onclick="sortOpen('opened_at')">Opened</th>
                     </tr>
                 </thead>
                 <tbody id="open-tbody">
@@ -321,17 +326,17 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Symbol</th>
-                        <th>Signal</th>
-                        <th>DTE</th>
-                        <th>Entry</th>
-                        <th>Result %</th>
-                        <th>P&L</th>
-                        <th>Outcome</th>
-                        <th>Conviction</th>
-                        <th>DA</th>
-                        <th>Opened</th>
-                        <th>Closed</th>
+                        <th class="sortable" data-col="symbol"       onclick="sortClosed('symbol')">Symbol</th>
+                        <th class="sortable" data-col="signal"       onclick="sortClosed('signal')">Signal</th>
+                        <th class="sortable" data-col="horizon_days" onclick="sortClosed('horizon_days')">DTE</th>
+                        <th class="sortable" data-col="entry_price"  onclick="sortClosed('entry_price')">Entry</th>
+                        <th class="sortable" data-col="outcome_pct"  onclick="sortClosed('outcome_pct')">Result %</th>
+                        <th class="sortable" data-col="outcome_pnl"  onclick="sortClosed('outcome_pnl')">P&L</th>
+                        <th class="sortable" data-col="close_reason" onclick="sortClosed('close_reason')">Outcome</th>
+                        <th class="sortable" data-col="conviction"   onclick="sortClosed('conviction')">Conviction</th>
+                        <th class="sortable" data-col="da_score"     onclick="sortClosed('da_score')">DA</th>
+                        <th class="sortable" data-col="opened_at"    onclick="sortClosed('opened_at')">Opened</th>
+                        <th class="sortable" data-col="closed_at"    onclick="sortClosed('closed_at')">Closed</th>
                     </tr>
                 </thead>
                 <tbody id="closed-tbody">
@@ -414,6 +419,42 @@
         return { text: r || '—', cls: '' };
     }
 
+    // ── SORTING ───────────────────────────────────────────────
+    const CONV_RANK = { Strong: 3, Moderate: 2, Weak: 1 };
+    let openSort   = { col: 'opened_at', dir: -1 };
+    let closedSort = { col: 'closed_at', dir: -1 };
+
+    function _sortKey(t, col) {
+        if (col === 'conviction') return CONV_RANK[t.conviction] ?? 0;
+        return t[col] ?? '';
+    }
+
+    function _applySort(arr, state) {
+        return [...arr].sort((a, b) => {
+            const va = _sortKey(a, state.col), vb = _sortKey(b, state.col);
+            return va < vb ? -state.dir : va > vb ? state.dir : 0;
+        });
+    }
+
+    function _updateSortHeaders(tbodyId, state) {
+        const el = document.getElementById(tbodyId);
+        if (!el) return;
+        el.closest('table').querySelectorAll('thead th[data-col]').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            if (th.dataset.col === state.col) th.classList.add(state.dir === 1 ? 'sort-asc' : 'sort-desc');
+        });
+    }
+
+    function sortOpen(col) {
+        openSort = { col, dir: openSort.col === col ? -openSort.dir : 1 };
+        renderOpenTrades(lastOpenTrades);
+    }
+
+    function sortClosed(col) {
+        closedSort = { col, dir: closedSort.col === col ? -closedSort.dir : 1 };
+        renderClosedTrades(allClosed);
+    }
+
     let lastOpenTrades = [];
 
     function renderOpenTrades(trades) {
@@ -428,7 +469,8 @@
             return;
         }
         const limitVal = parseInt(document.getElementById('open-limit')?.value ?? '25');
-        const paged    = limitVal === 0 ? trades : trades.slice(0, limitVal);
+        const sorted   = _applySort(trades, openSort);
+        const paged    = limitVal === 0 ? sorted : sorted.slice(0, limitVal);
         tbody.innerHTML = paged.map(t => `
             <tr>
                 <td class="symbol-badge">${t.symbol}</td>
@@ -446,6 +488,7 @@
         if (counter) counter.textContent = limitVal === 0
             ? `Showing all ${trades.length} trades`
             : `Showing ${paged.length} of ${trades.length} trades`;
+        _updateSortHeaders('open-tbody', openSort);
     }
 
     let currentPage = 1;
@@ -464,11 +507,13 @@
             if (counter) counter.textContent = '';
             return;
         }
+        const sorted     = _applySort(filtered, closedSort);
+        _updateSortHeaders('closed-tbody', closedSort);
         const pageSize   = getPageSize();
-        const totalPages = pageSize === Infinity ? 1 : Math.ceil(filtered.length / pageSize);
+        const totalPages = pageSize === Infinity ? 1 : Math.ceil(sorted.length / pageSize);
         currentPage = Math.min(currentPage, totalPages);
         const start = pageSize === Infinity ? 0 : (currentPage - 1) * pageSize;
-        const paged = pageSize === Infinity ? filtered : filtered.slice(start, start + pageSize);
+        const paged = pageSize === Infinity ? sorted : sorted.slice(start, start + pageSize);
 
         tbody.innerHTML = paged.map(t => {
             const reason = reasonLabel(t.close_reason);
@@ -488,7 +533,7 @@
             </tr>`;
         }).join('');
 
-        if (counter) counter.textContent = `Showing ${paged.length} of ${filtered.length} trades`;
+        if (counter) counter.textContent = `Showing ${paged.length} of ${sorted.length} trades`;
 
         // Pagination controls — only show when more than one page
         const pag = document.getElementById('row-count');
@@ -498,7 +543,7 @@
             pgHtml += `<button class="btn ${p===currentPage?'primary':''}" style="padding:0.2rem 0.5rem;font-size:0.72rem;" onclick="goPage(${p})">${p}</button> `;
         }
         pgHtml += `<button class="btn" style="padding:0.2rem 0.5rem;font-size:0.72rem;" ${currentPage===totalPages?'disabled':''} onclick="goPage(${currentPage+1})">›</button>`;
-        if (counter) counter.innerHTML = `Showing ${paged.length} of ${filtered.length} trades` + pgHtml;
+        if (counter) counter.innerHTML = `Showing ${paged.length} of ${sorted.length} trades` + pgHtml;
     }
 
     function goPage(p) {
