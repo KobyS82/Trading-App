@@ -381,23 +381,44 @@
         .info-label { color: #8b949e; }
         .info-value { color: #c9d1d9; font-weight: 700; }
 
-        /* ── HERO BANNER ── */
-        .hero-banner {
-            max-width: 980px;
-            margin: 0 auto 1rem;
-            padding: 0.32rem 1rem;
-            background: rgba(88,166,255,0.04);
-            border: 1px solid rgba(88,166,255,0.13);
-            border-radius: 6px;
-            font-size: 0.74rem;
+        /* ── PAGE HEADER (shared style with bot.html / leaderboard.html) ── */
+        .page-header {
+            background: #161b22;
+            border-bottom: 1px solid #21262d;
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+        .page-header h1 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #e6edf3;
+            flex: 1;
+            min-width: 160px;
+            white-space: nowrap;
+        }
+        .page-header h1 span { color: #58a6ff; }
+        .nav-link {
+            font-size: 0.75rem;
             color: #8b949e;
-            display: flex; align-items: center; gap: 0.5rem;
+            text-decoration: none;
+            padding: 0.3rem 0.65rem;
+            border: 1px solid #30363d;
+            border-radius: 6px;
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
         }
-        .hero-name {
-            font-weight: 700; color: #58a6ff;
-            font-size: 0.76rem; letter-spacing: 0.02em; white-space: nowrap;
+        .nav-link:hover { background: #21262d; color: #c9d1d9; text-decoration: none; }
+        /* Tagline strip below header */
+        .tagline-strip {
+            background: #0d1117;
+            border-bottom: 1px solid #161b22;
+            padding: 0.3rem 1.25rem;
+            font-size: 0.71rem;
+            color: #484f58;
         }
-        .hero-sep { color: #21262d; flex-shrink: 0; }
 
         /* ── BROKER LINKS ── */
         .broker-links {
@@ -450,11 +471,13 @@
     </style>
 </head>
 <body>
-<div class="hero-banner">
-    <span class="hero-name">WalkForwardEdge</span><span class="hero-sep">|</span>
+<div class="page-header">
+    <h1><span>WalkForwardEdge</span></h1>
+    <a class="nav-link" href="leaderboard.html">🏆 Leaderboard</a>
+    <a class="nav-link" href="bot.html">⚡ Bot Dashboard</a>
+</div>
+<div class="tagline-strip">
     Walk-forward backtested ML signals with auditable directional accuracy. Bot scans 60 tickers 3× daily. No cherry-picked backtests.
-    <a href="leaderboard.html" style="margin-left:auto; font-size:0.75rem; color:#58a6ff; white-space:nowrap; text-decoration:none; opacity:0.8;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8">🏆 Leaderboard →</a>
-    <a href="bot.html" style="margin-left:0.75rem; font-size:0.75rem; color:#58a6ff; white-space:nowrap; text-decoration:none; opacity:0.8;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.8">⚡ Bot Dashboard →</a>
 </div>
 <div class="app-container">
 
@@ -493,13 +516,13 @@
             <button class="go-btn" onclick="getPrediction()">Go</button>
         </div>
         <div class="select-row">
-            <select id="model-select" onchange="onControlChange(); document.getElementById('adaptive-note').style.display = this.value === 'adaptive' ? 'block' : 'none';">
+            <select id="model-select" title="Which ML model to use for the prediction. LightGBM is recommended — it has the most data and is used by the bot." onchange="onControlChange(); document.getElementById('adaptive-note').style.display = this.value === 'adaptive' ? 'block' : 'none';">
                 <option value="linear">Linear Regression</option>
                 <option value="rf">Random Forest</option>
                 <option value="lgb" selected>LightGBM</option>
                 <option value="adaptive">Adaptive LGB (Ticker-Tuned)</option>
             </select>
-            <select id="horizon-select" onchange="onControlChange()"></select>
+            <select id="horizon-select" title="How many days out to predict. DTE = Days To Expiration (options terminology). Shorter horizons have more backtested samples and tend to be more reliable." onchange="onControlChange()"></select>
         </div>
         <div id="adaptive-note" style="display:none; font-size:0.68rem; color:#d29922; margin-top:0.3rem; padding: 0 0.1rem;">
             ⚠ Adaptive LGB generates signals only — not yet used for bot paper trades.
@@ -532,16 +555,16 @@
     <!-- SIGNAL + CONVICTION -->
     <div class="signal-row">
         <span id="signal-badge" class="signal-badge"></span>
-        <span id="conviction-badge" class="conviction-badge"></span>
+        <span id="conviction-badge" class="conviction-badge" title="Conviction = how strongly the two ML models (Random Forest + LightGBM) agree on direction. Strong: both agree + DA ≥ 55%. Moderate: one agrees + DA ≥ 52%. Weak: low agreement or near earnings/FOMC."></span>
     </div>
 
     <!-- MODEL CONSENSUS -->
-    <div id="consensus-display" class="consensus-display"></div>
+    <div id="consensus-display" class="consensus-display" title="Each arrow shows an independent model's predicted direction (▲ up / ▼ down). When all models agree, conviction is stronger."></div>
 
     <!-- DA GAUGE -->
     <div class="da-section">
         <div class="da-header">
-            <span class="da-label">Directional Accuracy</span>
+            <span class="da-label" title="Walk-forward Directional Accuracy: the % of times this model correctly predicted UP vs DOWN on out-of-sample data it never trained on. 50% = coin flip. ≥55% = meaningful edge. Calculated across ~400 backtested samples.">Directional Accuracy ⓘ</span>
             <span id="da-value" style="font-weight:700; font-size:0.9rem;"></span>
         </div>
         <div class="da-wrap">
