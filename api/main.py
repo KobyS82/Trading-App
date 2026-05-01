@@ -32,8 +32,9 @@ async def lifespan(_app):
     _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=12,    minute=30,    timezone=_ET))
     _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=15,    minute=55,    timezone=_ET))
     _scheduler.add_job(_check_paper_trades_job, CronTrigger(day_of_week="mon-fri", hour="9-16",minute="*/30",timezone=_ET))
+    _scheduler.add_job(check_outcomes,          CronTrigger(day_of_week="mon-fri", hour="10,16",minute=30,   timezone=_ET))
     _scheduler.start()
-    print("[scheduler] Started — scans at 09:35, 12:30, and 15:55 ET | outcomes checked every 30min 9-4 ET, Mon–Fri")
+    print("[scheduler] Started — scans at 09:35, 12:30, 15:55 ET | paper trades every 30min 9-4 ET | outcomes scored 10:30 & 16:30 ET, Mon–Fri")
     yield
     _scheduler.shutdown()
 
@@ -1020,7 +1021,7 @@ def get_leaderboard(model: str = "lgb", horizon: int = 0):
     if not SUPABASE_URL or not SUPABASE_KEY:
         return {"error": "Supabase not configured", "entries": []}
     try:
-        model_map = {"lgb": "LightGBM", "rf": "Random Forest", "linear": "Linear Regression"}
+        model_map = {"lgb": "LightGBM", "rf": "Random Forest", "linear": "Linear Regression", "adaptive": "Adaptive LGB"}
         model_name = model_map.get(model, "LightGBM")
         params = {
             "select": "symbol,model,horizon,signal,conviction,predicted_pct,directional_accuracy,logged_at",

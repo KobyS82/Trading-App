@@ -162,6 +162,7 @@
 
 <div class="page-header">
   <h1>WalkForwardEdge <span>/ Accuracy Leaderboard</span></h1>
+  <a class="nav-link" href="landing.html">About</a>
   <a class="nav-link" href="bot.html">⚡ Bot Dashboard</a>
   <a class="nav-link" href="index.html">← Back to Signals</a>
 </div>
@@ -324,10 +325,18 @@
     const buys  = _data.filter(r => r.signal === 'BUY').length;
     const sells = _data.filter(r => r.signal === 'SELL').length;
     document.getElementById('stat-tickers').textContent = _data.length;
-    document.getElementById('stat-avg-da').textContent  = _data.length ? avgDA.toFixed(1) + '%' : '—';
-    document.getElementById('stat-high-da').textContent = highDA;
-    document.getElementById('stat-buys').textContent    = buys;
-    document.getElementById('stat-sells').textContent   = sells;
+    const avgDaEl = document.getElementById('stat-avg-da');
+    avgDaEl.textContent = _data.length ? avgDA.toFixed(1) + '%' : '—';
+    avgDaEl.style.color = !_data.length ? '' : avgDA >= 55 ? '#3fb950' : avgDA >= 50 ? '#d29922' : '#f85149';
+    const highDaEl = document.getElementById('stat-high-da');
+    highDaEl.textContent = highDA;
+    highDaEl.style.color = highDA > 0 ? '#58a6ff' : '';
+    const buysEl = document.getElementById('stat-buys');
+    buysEl.textContent = buys;
+    buysEl.style.color = buys > 0 ? '#3fb950' : '';
+    const sellsEl = document.getElementById('stat-sells');
+    sellsEl.textContent = sells;
+    sellsEl.style.color = sells > 0 ? '#f85149' : '';
 
     if (!sorted.length) {
       document.getElementById('lb-tbody').innerHTML =

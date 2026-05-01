@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WalkForwardEdge — ML Trading Signals With Auditable Accuracy</title>
+<meta name="description" content="Walk-forward backtested machine learning signals for swing traders and options buyers. Get directional bias on 60+ tickers with verifiable accuracy — no cherry-picked backtests.">
+<meta property="og:title" content="WalkForwardEdge — Auditable ML Trading Signals">
+<meta property="og:description" content="Walk-forward backtested ML signals for swing traders. Real directional accuracy on data the model never saw. 60 tickers, 4 models, no cherry-picked backtests.">
+<meta property="og:type" content="website">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+    background: #0d1117;
+    color: #c9d1d9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    line-height: 1.6;
+}
+
+/* ── HEADER (matches other pages) ── */
+.page-header {
+    background: #161b22;
+    border-bottom: 1px solid #21262d;
+    padding: 0.75rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.page-header h1 { font-size: 1rem; font-weight: 700; color: #e6edf3; flex: 1; min-width: 160px; white-space: nowrap; }
+.page-header h1 span { color: #58a6ff; }
+.nav-link {
+    font-size: 0.75rem; color: #8b949e; text-decoration: none;
+    padding: 0.3rem 0.65rem; border: 1px solid #30363d; border-radius: 6px;
+    transition: background 0.15s, color 0.15s; white-space: nowrap;
+}
+.nav-link:hover { background: #21262d; color: #c9d1d9; }
+.nav-link.active { background: rgba(35,134,54,0.15); border-color: #238636; color: #3fb950; }
+
+/* ── LAYOUT ── */
+.content { max-width: 900px; margin: 0 auto; padding: 0 1.25rem; }
+
+/* ── HERO ── */
+.hero {
+    text-align: center;
+    padding: 4.5rem 1.25rem 3.5rem;
+    max-width: 820px;
+    margin: 0 auto;
+}
+.hero-badge {
+    display: inline-block;
+    font-size: 0.7rem; font-weight: 700; color: #58a6ff;
+    background: rgba(88,166,255,0.1); border: 1px solid rgba(88,166,255,0.25);
+    border-radius: 20px; padding: 0.25rem 0.9rem;
+    margin-bottom: 1.5rem; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.hero h2 {
+    font-size: clamp(1.75rem, 4.5vw, 2.8rem);
+    font-weight: 800; color: #e6edf3;
+    margin-bottom: 1rem; line-height: 1.2;
+}
+.hero h2 em { color: #58a6ff; font-style: normal; }
+.hero-sub {
+    font-size: 1.05rem; color: #8b949e;
+    max-width: 580px; margin: 0 auto 2rem;
+}
+.cta-row {
+    display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap;
+    margin-bottom: 3.5rem;
+}
+.cta-primary {
+    background: #238636; color: #fff; border: none;
+    padding: 0.75rem 1.85rem; border-radius: 8px;
+    font-size: 1rem; font-weight: 700; cursor: pointer;
+    text-decoration: none; transition: background 0.15s;
+}
+.cta-primary:hover { background: #2ea043; }
+.cta-secondary {
+    background: transparent; color: #c9d1d9;
+    border: 1px solid #30363d;
+    padding: 0.75rem 1.85rem; border-radius: 8px;
+    font-size: 1rem; font-weight: 600; cursor: pointer;
+    text-decoration: none; transition: background 0.15s;
+}
+.cta-secondary:hover { background: #21262d; }
+
+/* ── STATS STRIP ── */
+.stats-strip {
+    display: flex; gap: 2.5rem; justify-content: center; flex-wrap: wrap;
+    padding: 1.5rem; background: #161b22;
+    border-top: 1px solid #21262d; border-bottom: 1px solid #21262d;
+}
+.stat { text-align: center; }
+.stat-num { font-size: 1.6rem; font-weight: 800; color: #e6edf3; }
+.stat-lbl { font-size: 0.7rem; color: #8b949e; margin-top: 0.1rem; }
+
+/* ── SECTIONS ── */
+.section {
+    padding: 3.5rem 1.25rem;
+    border-top: 1px solid #21262d;
+}
+.section-inner { max-width: 860px; margin: 0 auto; }
+.section-tag {
+    font-size: 0.68rem; font-weight: 700; color: #58a6ff;
+    text-transform: uppercase; letter-spacing: 0.07em;
+    margin-bottom: 0.5rem;
+}
+.section h2 {
+    font-size: clamp(1.3rem, 3vw, 1.85rem);
+    font-weight: 700; color: #e6edf3;
+    margin-bottom: 0.85rem;
+}
+.section p {
+    color: #8b949e; font-size: 0.95rem; line-height: 1.75;
+    margin-bottom: 1rem; max-width: 720px;
+}
+.section p strong { color: #c9d1d9; }
+
+/* ── STEP CARDS ── */
+.steps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1rem; margin: 2rem 0;
+}
+.step-card {
+    background: #161b22; border: 1px solid #21262d;
+    border-radius: 10px; padding: 1.35rem;
+}
+.step-num {
+    font-size: 0.68rem; font-weight: 700; color: #58a6ff;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    margin-bottom: 0.55rem;
+}
+.step-title { font-size: 0.95rem; font-weight: 700; color: #e6edf3; margin-bottom: 0.45rem; }
+.step-body { font-size: 0.82rem; color: #8b949e; line-height: 1.6; }
+
+/* ── ACCURACY DEMO ── */
+.da-demo {
+    background: #161b22; border: 1px solid #21262d;
+    border-radius: 10px; padding: 1.5rem; margin: 1.5rem 0;
+}
+.da-demo-title { font-size: 0.82rem; font-weight: 700; color: #8b949e; margin-bottom: 1rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.da-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.6rem; }
+.da-row-label { font-size: 0.8rem; color: #8b949e; min-width: 70px; }
+.da-bar-bg { flex: 1; background: #21262d; border-radius: 4px; height: 8px; max-width: 260px; }
+.da-bar-fill { height: 8px; border-radius: 4px; }
+.da-row-pct { font-size: 0.82rem; font-weight: 700; min-width: 42px; }
+.da-note { font-size: 0.75rem; color: #484f58; margin-top: 0.75rem; }
+
+/* ── FEATURE CARDS ── */
+.features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(245px, 1fr));
+    gap: 1rem; margin-top: 1.75rem;
+}
+.feature-card {
+    background: #161b22; border: 1px solid #21262d;
+    border-radius: 10px; padding: 1.35rem;
+    transition: border-color 0.2s;
+}
+.feature-card:hover { border-color: #30363d; }
+.feature-icon { font-size: 1.4rem; margin-bottom: 0.55rem; }
+.feature-title { font-size: 0.92rem; font-weight: 700; color: #e6edf3; margin-bottom: 0.4rem; }
+.feature-body { font-size: 0.8rem; color: #8b949e; line-height: 1.55; }
+
+/* ── DISCLAIMER ── */
+.disclaimer {
+    background: #161b22; border: 1px solid #21262d;
+    border-radius: 8px; padding: 1rem 1.25rem;
+    margin: 2rem 0; font-size: 0.78rem; color: #484f58; line-height: 1.6;
+}
+
+/* ── FINAL CTA ── */
+.final-cta {
+    text-align: center;
+    padding: 4rem 1.25rem;
+    border-top: 1px solid #21262d;
+    background: #161b22;
+}
+.final-cta h2 { font-size: 1.6rem; font-weight: 700; color: #e6edf3; margin-bottom: 0.75rem; }
+.final-cta p { color: #8b949e; font-size: 0.95rem; margin-bottom: 2rem; }
+
+/* ── FOOTER ── */
+.footer {
+    text-align: center;
+    padding: 1.5rem;
+    font-size: 0.72rem; color: #30363d;
+    border-top: 1px solid #21262d;
+}
+
+@media (max-width: 600px) {
+    .hero { padding: 3rem 1rem 2.5rem; }
+    .stats-strip { gap: 1.5rem; }
+    .cta-row { flex-direction: column; align-items: center; }
+    .cta-primary, .cta-secondary { width: 100%; max-width: 320px; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<div class="page-header">
+    <h1><span>WalkForwardEdge</span></h1>
+    <a class="nav-link active" href="landing.html">About</a>
+    <a class="nav-link" href="index.html">🔮 Get Signal</a>
+    <a class="nav-link" href="leaderboard.html">🏆 Leaderboard</a>
+    <a class="nav-link" href="bot.html">⚡ Bot Dashboard</a>
+</div>
+
+<!-- ── HERO ── -->
+<div class="hero">
+    <div class="hero-badge">Walk-Forward Backtested · No Data Leakage</div>
+    <h2>ML Signals You Can <em>Actually Verify</em></h2>
+    <p class="hero-sub">
+        Get directional bias on 60+ stocks and ETFs from four machine learning models —
+        measured on data they never trained on. Honest accuracy, not curve-fitting.
+    </p>
+    <div class="cta-row">
+        <a href="index.html" class="cta-primary">Get a Free Signal →</a>
+        <a href="leaderboard.html" class="cta-secondary">View Accuracy Leaderboard</a>
+    </div>
+</div>
+
+<!-- ── STATS STRIP ── -->
+<div class="stats-strip">
+    <div class="stat">
+        <div class="stat-num">60+</div>
+        <div class="stat-lbl">Tickers scanned</div>
+    </div>
+    <div class="stat">
+        <div class="stat-num">3×</div>
+        <div class="stat-lbl">Daily bot scans</div>
+    </div>
+    <div class="stat">
+        <div class="stat-num">4</div>
+        <div class="stat-lbl">ML models</div>
+    </div>
+    <div class="stat">
+        <div class="stat-num">~400</div>
+        <div class="stat-lbl">Backtested samples</div>
+    </div>
+    <div class="stat">
+        <div class="stat-num">5</div>
+        <div class="stat-lbl">Time horizons (1d–63d)</div>
+    </div>
+</div>
+
+<!-- ── METHODOLOGY ── -->
+<div class="section">
+<div class="section-inner">
+    <div class="section-tag">Methodology</div>
+    <h2>What is Walk-Forward Backtesting?</h2>
+    <p>
+        Most "ML trading signals" are trained on a full historical dataset and then tested on that same data.
+        That's called <strong>overfitting</strong> — the model memorizes the past rather than learning to predict the future.
+        A backtest on training data will always look great, even for a completely useless model.
+    </p>
+    <p>
+        Walk-forward backtesting is different. The dataset is split into multiple sequential windows.
+        For each window, the model is trained on everything <strong>before</strong> the test period,
+        then evaluated on the test period it never saw. Repeat 5 times across the full history.
+        The resulting directional accuracy is a genuine out-of-sample measurement.
+    </p>
+
+    <div class="steps-grid">
+        <div class="step-card">
+            <div class="step-num">Step 1</div>
+            <div class="step-title">Historical Split</div>
+            <div class="step-body">Up to 10 years of daily price data per ticker is divided into 5 walk-forward windows, each roughly 80 trading days (~400 total test samples).</div>
+        </div>
+        <div class="step-card">
+            <div class="step-num">Step 2</div>
+            <div class="step-title">Blind Training</div>
+            <div class="step-body">For each window, the model trains on data from <em>before</em> the test period only. It has no access to the prices it's about to predict.</div>
+        </div>
+        <div class="step-card">
+            <div class="step-num">Step 3</div>
+            <div class="step-title">Directional Accuracy</div>
+            <div class="step-body">The model predicts UP or DOWN. Each prediction is checked against actual prices. Accuracy across all 5 windows is the displayed DA%.</div>
+        </div>
+    </div>
+
+    <!-- Visual DA scale -->
+    <div class="da-demo">
+        <div class="da-demo-title">How to read the DA gauge</div>
+        <div class="da-row">
+            <span class="da-row-label" style="color:#f85149;">Below 50%</span>
+            <div class="da-bar-bg"><div class="da-bar-fill" style="width:40%;background:#f85149;"></div></div>
+            <span class="da-row-pct" style="color:#f85149;">40–49%</span>
+        </div>
+        <div class="da-row">
+            <span class="da-row-label" style="color:#d29922;">Coin flip</span>
+            <div class="da-bar-bg"><div class="da-bar-fill" style="width:50%;background:#d29922;"></div></div>
+            <span class="da-row-pct" style="color:#d29922;">50%</span>
+        </div>
+        <div class="da-row">
+            <span class="da-row-label" style="color:#58a6ff;">Meaningful edge</span>
+            <div class="da-bar-bg"><div class="da-bar-fill" style="width:55%;background:#58a6ff;"></div></div>
+            <span class="da-row-pct" style="color:#58a6ff;">55%</span>
+        </div>
+        <div class="da-row">
+            <span class="da-row-label" style="color:#3fb950;">Strong edge</span>
+            <div class="da-bar-bg"><div class="da-bar-fill" style="width:63%;background:#3fb950;"></div></div>
+            <span class="da-row-pct" style="color:#3fb950;">60–65%</span>
+        </div>
+        <div class="da-note">50% = pure coin flip. ≥55% = statistically meaningful directional edge over ~400 samples.</div>
+    </div>
+</div>
+</div>
+
+<!-- ── MODELS ── -->
+<div class="section">
+<div class="section-inner">
+    <div class="section-tag">The Models</div>
+    <h2>Four Models, One Consensus</h2>
+    <p>
+        Every signal is backed by four independent ML models that each predict the direction
+        separately. When they agree, conviction is higher. When they diverge, the signal is
+        rated Weak regardless of the raw accuracy number.
+    </p>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">📈</div>
+            <div class="feature-title">Linear Regression</div>
+            <div class="feature-body">The simplest baseline — useful for seeing whether a ticker has any detectable linear trend. Low weight in conviction scoring; mainly serves as a reality check against the more complex models.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🌲</div>
+            <div class="feature-title">Random Forest</div>
+            <div class="feature-body">An ensemble of decision trees that captures non-linear interactions between indicators. Uses OOB (out-of-bag) scoring for an additional internal accuracy check, with no extra train/test split needed.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <div class="feature-title">LightGBM</div>
+            <div class="feature-body">Gradient-boosted trees — the primary model used by the live paper-trading bot. Handles high-dimensional indicator data efficiently and tends to have the highest walk-forward directional accuracy across most tickers.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🎯</div>
+            <div class="feature-title">Adaptive LGB</div>
+            <div class="feature-body">LightGBM with per-ticker feature selection using Mutual Information scoring. Different stocks respond to different signals — NVDA may be momentum-driven while utilities are mean-reverting. The adaptive model drops the 10 weakest features for each ticker before training.</div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- ── FEATURES ── -->
+<div class="section">
+<div class="section-inner">
+    <div class="section-tag">What's Included</div>
+    <h2>Built for Swing Traders &amp; Options Buyers</h2>
+    <p>
+        WalkForwardEdge is a directional bias tool, not a brokerage. Use the signal to
+        establish your pre-trade directional lean, then open your broker's options chain
+        to size and execute.
+    </p>
+
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">🤖</div>
+            <div class="feature-title">Live Paper-Trading Bot</div>
+            <div class="feature-body">Scans 60+ tickers 3× daily (9:35, 12:30, 15:55 ET) using LightGBM. Enters paper trades on Strong/Moderate signals with ≥52% DA. Stop-loss, take-profit, and horizon expiry all tracked automatically.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🏆</div>
+            <div class="feature-title">Accuracy Leaderboard</div>
+            <div class="feature-body">Every prediction is logged with its entry price. When the horizon elapses, outcomes are scored automatically. The leaderboard shows per-ticker DA% across all 4 models so you can see where the edge is strongest.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📋</div>
+            <div class="feature-title">22 Technical Indicators</div>
+            <div class="feature-body">RSI, MACD, Bollinger Band distance, 200-DMA distance, momentum across 5/10/20/63-day windows, VIX regime, earnings proximity flag, news sentiment (TextBlob), gap %, and more.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🕐</div>
+            <div class="feature-title">5 Horizons</div>
+            <div class="feature-body">1-day (next session), 3-day, end-of-week, 10-day, 21-day (standard monthly options), 42-day, and 63-day (quarterly) predictions — aligned to standard options expirations.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📰</div>
+            <div class="feature-title">News &amp; Market Context</div>
+            <div class="feature-body">Latest headlines with sentiment analysis, put/call ratio, ATM implied volatility, and VIX reading — all shown alongside the signal so you have full context for your trade decision.</div>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔗</div>
+            <div class="feature-title">Broker Deep Links</div>
+            <div class="feature-body">One-click links to Robinhood, TradingView, Yahoo Finance, and MarketWatch for any ticker. Get the signal here, execute in your broker of choice.</div>
+        </div>
+    </div>
+
+    <div class="disclaimer">
+        <strong>Not investment advice.</strong> This is a directional bias filter for educational and informational purposes only.
+        Directional accuracy is measured on historical out-of-sample data — past performance does not guarantee future results.
+        All paper trades are simulated with a fixed $1,000 notional per trade. No real money is managed.
+    </div>
+</div>
+</div>
+
+<!-- ── FINAL CTA ── -->
+<div class="final-cta">
+    <h2>See Where the Edge Is Today</h2>
+    <p>Free to use. No login required. Just enter a ticker and get the signal.</p>
+    <div class="cta-row">
+        <a href="index.html" class="cta-primary">Open Signal Dashboard →</a>
+        <a href="leaderboard.html" class="cta-secondary">View Leaderboard</a>
+    </div>
+</div>
+
+<div class="footer">
+    WalkForwardEdge &mdash; Walk-forward backtested ML trading signals. Not investment advice.
+</div>
+
+</body>
+</html>

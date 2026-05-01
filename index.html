@@ -169,6 +169,8 @@
         select:focus, .ticker-wrapper input:focus { outline: none; border-color: #58a6ff; }
 
         .select-row { display: grid; grid-template-columns: 1.15fr 1fr; gap: 0.5rem; }
+        .select-label { display: flex; flex-direction: column; gap: 0.18rem; }
+        .select-label-text { font-size: 0.6rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; padding-left: 0.1rem; }
 
         .go-btn {
             background: #238636; color: white; border: none;
@@ -233,17 +235,24 @@
             gap: 0.6rem; margin: 0.75rem 0; flex-wrap: wrap;
         }
         .signal-badge {
-            font-size: 1.5rem; font-weight: 700;
-            padding: 0.3rem 1.1rem; border-radius: 6px;
+            font-size: 1.75rem; font-weight: 700;
+            padding: 0.35rem 1.2rem; border-radius: 8px;
             letter-spacing: 0.05em;
+            transition: color 0.3s, background 0.3s, border-color 0.3s, box-shadow 0.3s;
         }
         .conviction-badge {
-            font-size: 0.78rem; font-weight: 700;
-            padding: 0.25rem 0.65rem; border-radius: 4px;
+            font-size: 0.82rem; font-weight: 700;
+            padding: 0.3rem 0.75rem; border-radius: 6px;
+            transition: color 0.3s, background 0.3s, border-color 0.3s;
         }
 
         /* ── CONSENSUS ── */
-        .consensus-display { font-size: 0.8rem; color: #8b949e; margin: 0.2rem 0; text-align: center; }
+        .consensus-display {
+            font-size: 0.82rem; color: #8b949e; margin: 0.25rem 0 0.1rem; text-align: center;
+            background: #0d1117; border: 1px solid #21262d; border-radius: 6px;
+            padding: 0.4rem 0.75rem; display: inline-block;
+        }
+        .consensus-wrap { text-align: center; margin: 0.2rem 0; }
 
         /* ── DA GAUGE ── */
         .da-section { margin: 0.85rem 0; }
@@ -473,6 +482,7 @@
 <body>
 <div class="page-header">
     <h1><span>WalkForwardEdge</span></h1>
+    <a class="nav-link" href="landing.html">About</a>
     <a class="nav-link" href="leaderboard.html">🏆 Leaderboard</a>
     <a class="nav-link" href="bot.html">⚡ Bot Dashboard</a>
 </div>
@@ -516,13 +526,19 @@
             <button class="go-btn" onclick="getPrediction()">Go</button>
         </div>
         <div class="select-row">
-            <select id="model-select" title="Which ML model to use for the prediction. LightGBM is recommended — it has the most data and is used by the bot." onchange="onControlChange(); document.getElementById('adaptive-note').style.display = this.value === 'adaptive' ? 'block' : 'none';">
-                <option value="linear">Linear Regression</option>
-                <option value="rf">Random Forest</option>
-                <option value="lgb" selected>LightGBM</option>
-                <option value="adaptive">Adaptive LGB (Ticker-Tuned)</option>
-            </select>
-            <select id="horizon-select" title="How many days out to predict. DTE = Days To Expiration (options terminology). Shorter horizons have more backtested samples and tend to be more reliable." onchange="onControlChange()"></select>
+            <label class="select-label">
+                <span class="select-label-text">Model</span>
+                <select id="model-select" title="Which ML model to use for the prediction. LightGBM is recommended — it has the most data and is used by the bot." onchange="onControlChange(); document.getElementById('adaptive-note').style.display = this.value === 'adaptive' ? 'block' : 'none';">
+                    <option value="linear">Linear Regression</option>
+                    <option value="rf">Random Forest</option>
+                    <option value="lgb" selected>LightGBM</option>
+                    <option value="adaptive">Adaptive LGB (Ticker-Tuned)</option>
+                </select>
+            </label>
+            <label class="select-label">
+                <span class="select-label-text">Horizon (DTE)</span>
+                <select id="horizon-select" title="How many days out to predict. DTE = Days To Expiration (options terminology). Shorter horizons have more backtested samples and tend to be more reliable." onchange="onControlChange()"></select>
+            </label>
         </div>
         <div id="adaptive-note" style="display:none; font-size:0.68rem; color:#d29922; margin-top:0.3rem; padding: 0 0.1rem;">
             ⚠ Adaptive LGB generates signals only — not yet used for bot paper trades.
@@ -559,7 +575,9 @@
     </div>
 
     <!-- MODEL CONSENSUS -->
-    <div id="consensus-display" class="consensus-display" title="Each arrow shows an independent model's predicted direction (▲ up / ▼ down). When all models agree, conviction is stronger."></div>
+    <div class="consensus-wrap">
+        <div id="consensus-display" class="consensus-display" title="Each arrow shows an independent model's predicted direction (▲ up / ▼ down). When all models agree, conviction is stronger."></div>
+    </div>
 
     <!-- DA GAUGE -->
     <div class="da-section">
@@ -1007,6 +1025,13 @@ async function getPrediction() {
                         : data.conviction === 'Moderate' ? '#d29922' : '#8b949e';
         convBadge.textContent = data.conviction + ' Conviction';
         convBadge.style.cssText = `color:${convColor}; background:${convColor}22; border:1px solid ${convColor}55;`;
+
+        // Strong conviction with a clear directional signal → subtle glow on the badge
+        if (data.conviction === 'Strong' && data.signal !== 'HOLD') {
+            sigBadge.style.boxShadow = `0 0 12px ${sigColor}44, 0 0 24px ${sigColor}22`;
+        } else {
+            sigBadge.style.boxShadow = 'none';
+        }
 
         // ── Model consensus ──
         const consEl = document.getElementById('consensus-display');
