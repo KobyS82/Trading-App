@@ -421,6 +421,24 @@
         }
         .footnotes p { margin: 0.2rem 0; }
 
+        /* ── LOG TABLE ── */
+        .log-table-wrap { max-height: 360px; overflow-y: auto; overflow-x: auto; border-radius: 4px; }
+        .log-table-wrap thead th { position: sticky; top: 0; background: #0d1117; z-index: 1; }
+        .log-table { width: 100%; border-collapse: collapse; font-size: 0.76rem; }
+        .log-table thead th {
+            text-align: left; font-size: 0.68rem; font-weight: 600; color: #8b949e;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            padding: 0.45rem 0.6rem; border-bottom: 1px solid #21262d;
+            white-space: nowrap; cursor: pointer; user-select: none;
+        }
+        .log-table thead th:hover { color: #c9d1d9; }
+        .log-table thead th.sort-asc::after  { content: ' ▲'; font-size: 0.6em; color: #58a6ff; }
+        .log-table thead th.sort-desc::after { content: ' ▼'; font-size: 0.6em; color: #58a6ff; }
+        .log-table tbody tr { border-bottom: 1px solid #21262d; transition: background 0.12s; }
+        .log-table tbody tr:last-child { border-bottom: none; }
+        .log-table tbody tr:hover { background: #1c2128; }
+        .log-table tbody td { padding: 0.45rem 0.6rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
         /* ── MOBILE ── */
         @media (max-width: 480px) {
             body { padding: 0; }
@@ -1289,73 +1307,120 @@ function onControlChange() {
 }
 
 // ── LIVE PREDICTION LOG ───────────────────────────────────
-let _liveLogData = [];
-let _liveLogSort = { col: null, dir: 1 };
-const _CONV_RANK = { Strong: 3, Moderate: 2, Weak: 1 };
+let _liveLogData   = [];
+let _liveLogSort   = { col: 'logged_at', dir: -1 };
+let _liveLogFilter = 'resolved';
+let _liveLogLimit  = 50;
+const _CONV_RANK   = { Strong: 3, Moderate: 2, Weak: 1 };
 
 function sortLiveLog(col) {
     _liveLogSort = { col, dir: _liveLogSort.col === col ? -_liveLogSort.dir : 1 };
     renderLiveLog();
 }
 
+function setLiveLogFilter(f) { _liveLogFilter = f; renderLiveLog(); }
+function setLiveLogLimit(v)  { _liveLogLimit  = parseInt(v); renderLiveLog(); }
+
 function renderLiveLog() {
     if (!_liveLogData.length) return;
     const listEl = document.getElementById('live-log-list');
     if (!listEl) return;
 
+    const resolved = _liveLogData.filter(r => r.was_correct !== null && r.was_correct !== undefined);
+    const pending  = _liveLogData.filter(r => r.was_correct === null  || r.was_correct === undefined);
+    const display  = _liveLogFilter === 'resolved' ? resolved
+                   : _liveLogFilter === 'pending'  ? pending
+                   : _liveLogData;
+
     const { col, dir } = _liveLogSort;
-    const sorted = col ? [..._liveLogData].sort((a, b) => {
+    const sorted = [...display].sort((a, b) => {
         let va, vb;
-        if (col === 'conviction') {
-            va = _CONV_RANK[a.conviction] ?? 0; vb = _CONV_RANK[b.conviction] ?? 0;
-        } else if (col === 'was_correct') {
+        if (col === 'conviction')   { va = _CONV_RANK[a.conviction] ?? 0; vb = _CONV_RANK[b.conviction] ?? 0; }
+        else if (col === 'was_correct') {
             va = a.was_correct === true ? 2 : a.was_correct === false ? 1 : 0;
             vb = b.was_correct === true ? 2 : b.was_correct === false ? 1 : 0;
         } else { va = a[col] ?? ''; vb = b[col] ?? ''; }
         return va < vb ? -dir : va > vb ? dir : 0;
-    }) : _liveLogData;
+    });
+    const paged = _liveLogLimit === 0 ? sorted : sorted.slice(0, _liveLogLimit);
 
-    function hdr(label, c) {
-        const active = col === c;
-        const arrow  = active ? (dir === 1 ? ' ▲' : ' ▼') : '';
-        return `<span style="cursor:pointer;user-select:none;${active ? 'color:#58a6ff;' : ''}" onclick="sortLiveLog('${c}')">${label}${arrow}</span>`;
+    function tab(label, f, count) {
+        const active = _liveLogFilter === f;
+        return `<button onclick="setLiveLogFilter('${f}')" style="padding:0.2rem 0.6rem;border-radius:20px;font-size:0.72rem;font-weight:600;cursor:pointer;border:1px solid ${active ? '#58a6ff' : '#30363d'};background:${active ? '#21262d' : 'transparent'};color:${active ? '#58a6ff' : '#8b949e'};">${label} (${count})</button>`;
+    }
+    const limitSel = `<select onchange="setLiveLogLimit(this.value)" style="margin-left:auto;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:0.15rem 0.4rem;font-size:0.72rem;cursor:pointer;">
+        ${[25,50,100,0].map(v => `<option value="${v}" ${_liveLogLimit===v?'selected':''}>${v||'All'}</option>`).join('')}
+    </select>`;
+    const controlsHtml = `<div style="display:flex;gap:0.4rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center;">
+        ${tab('Resolved','resolved',resolved.length)}
+        ${tab('Pending', 'pending', pending.length)}
+        ${tab('All',     'all',     _liveLogData.length)}
+        ${limitSel}
+    </div>`;
+
+    if (!display.length) {
+        listEl.innerHTML = controlsHtml + `<div style="color:#484f58;font-size:0.78rem;font-style:italic;padding:1rem 0;text-align:center;">
+            ${_liveLogFilter === 'resolved'
+                ? `No resolved outcomes yet — ${pending.length} signal${pending.length !== 1 ? 's' : ''} pending. Switch to Pending tab to view them.`
+                : 'No entries match this filter.'}
+        </div>`;
+        return;
     }
 
-    listEl.innerHTML = `
-        <div class="live-log-hdr">
-            ${hdr('Symbol','symbol')}${hdr('Signal','signal')}${hdr('Horizon','horizon')}
-            ${hdr('Pred %','predicted_pct')}${hdr('Conviction','conviction')}${hdr('Outcome','was_correct')}
-        </div>` +
-        sorted.map(r => {
-            const sigColor  = r.signal === 'BUY' ? '#3fb950' : r.signal === 'SELL' ? '#f85149' : '#8b949e';
-            const predSign  = r.predicted_pct >= 0 ? '+' : '';
-            const predColor = r.predicted_pct >= 0 ? '#3fb950' : '#f85149';
-            const convColor = r.conviction === 'Strong' ? '#3fb950' : r.conviction === 'Moderate' ? '#d29922' : '#8b949e';
+    function th(label, c) {
+        const cls = _liveLogSort.col === c ? (_liveLogSort.dir === 1 ? 'sort-asc' : 'sort-desc') : '';
+        return `<th class="${cls}" onclick="sortLiveLog('${c}')">${label}</th>`;
+    }
 
-            let outcomeHtml;
-            if (r.was_correct === null || r.was_correct === undefined) {
-                const calDaysTotal   = Math.ceil(r.horizon * 365 / 252);
-                const calDaysElapsed = Math.floor((Date.now() - new Date(r.logged_at)) / 86400000);
-                const tradingDaysLeft = Math.max(0, Math.round((calDaysTotal - calDaysElapsed) * 252 / 365));
-                outcomeHtml = `<span class="live-log-pending">~${tradingDaysLeft}td left</span>`;
-            } else {
-                const actSign  = r.actual_pct >= 0 ? '+' : '';
-                const actColor = r.actual_pct  >= 0 ? '#3fb950' : '#f85149';
-                const icon     = r.was_correct ? '✓' : '✗';
-                const icColor  = r.was_correct ? '#3fb950' : '#f85149';
-                outcomeHtml = `<span style="color:${icColor}; font-weight:700;">${icon}</span> `
-                            + `<span style="color:${actColor};">${actSign}${r.actual_pct}%</span>`;
-            }
+    const rows = paged.map(r => {
+        const sigColor  = r.signal === 'BUY' ? '#3fb950' : r.signal === 'SELL' ? '#f85149' : '#8b949e';
+        const predSign  = r.predicted_pct >= 0 ? '+' : '';
+        const predColor = r.predicted_pct >= 0 ? '#3fb950' : '#f85149';
+        const convColor = r.conviction === 'Strong' ? '#3fb950' : r.conviction === 'Moderate' ? '#d29922' : '#8b949e';
+        const daColor   = (r.directional_accuracy ?? 0) >= 55 ? '#3fb950' : '#d29922';
 
-            return `<div class="live-log-row" title="Logged ${r.logged_at}">
-                <span style="font-weight:700; color:#c9d1d9;">${r.symbol}</span>
-                <span style="color:${sigColor}; font-weight:700;">${r.signal}</span>
-                <span style="color:#8b949e;">${r.horizon}d</span>
-                <span style="color:${predColor}; font-weight:600;">${predSign}${r.predicted_pct}%</span>
-                <span style="color:${convColor};">${r.conviction}</span>
-                <span>${outcomeHtml}</span>
-            </div>`;
-        }).join('');
+        let outcomeHtml;
+        if (r.was_correct === null || r.was_correct === undefined) {
+            const calDaysTotal    = Math.ceil(r.horizon * 365 / 252);
+            const calDaysElapsed  = Math.floor((Date.now() - new Date(r.logged_at)) / 86400000);
+            const tradingDaysLeft = Math.max(0, Math.round((calDaysTotal - calDaysElapsed) * 252 / 365));
+            outcomeHtml = `<span class="live-log-pending">~${tradingDaysLeft}td left</span>`;
+        } else {
+            const actSign  = r.actual_pct >= 0 ? '+' : '';
+            const actColor = r.actual_pct  >= 0 ? '#3fb950' : '#f85149';
+            const icon     = r.was_correct ? '✓' : '✗';
+            const icColor  = r.was_correct ? '#3fb950' : '#f85149';
+            outcomeHtml = `<span style="color:${icColor};font-weight:700;">${icon}</span> `
+                        + `<span style="color:${actColor};">${actSign}${r.actual_pct}%</span>`;
+        }
+
+        const logDate = new Date(r.logged_at).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        return `<tr>
+            <td><a href="index.html?symbol=${r.symbol}" style="font-weight:700;color:#e6edf3;text-decoration:none;" onmouseover="this.style.color='#58a6ff'" onmouseout="this.style.color='#e6edf3'">${r.symbol}</a></td>
+            <td style="color:${sigColor};font-weight:700;">${r.signal}</td>
+            <td style="color:#8b949e;">${r.horizon}d</td>
+            <td style="color:${predColor};font-weight:600;">${predSign}${r.predicted_pct}%</td>
+            <td style="color:${daColor};">${r.directional_accuracy != null ? r.directional_accuracy + '%' : '—'}</td>
+            <td style="color:${convColor};">${r.conviction}</td>
+            <td>${outcomeHtml}</td>
+            <td style="color:#484f58;">${logDate}</td>
+        </tr>`;
+    }).join('');
+
+    listEl.innerHTML = controlsHtml + `
+        <div class="log-table-wrap">
+            <table class="log-table">
+                <thead><tr>
+                    ${th('Symbol','symbol')}${th('Signal','signal')}${th('DTE','horizon')}
+                    ${th('Pred %','predicted_pct')}${th('DA','directional_accuracy')}
+                    ${th('Conviction','conviction')}${th('Outcome','was_correct')}${th('Logged','logged_at')}
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+        <div style="font-size:0.7rem;color:#484f58;text-align:right;margin-top:0.4rem;">
+            Showing ${paged.length} of ${display.length}
+        </div>`;
 }
 
 async function loadLiveLog() {
@@ -1376,14 +1441,16 @@ async function loadLiveLog() {
         const resolved = logs.filter(r => r.was_correct !== null && r.was_correct !== undefined);
         const hits     = resolved.filter(r => r.was_correct).length;
         const summaryEl = document.getElementById('live-log-summary');
+        const pendingCount = logs.length - resolved.length;
         if (resolved.length > 0) {
             const pct = ((hits / resolved.length) * 100).toFixed(0);
             summaryEl.innerHTML =
-                `<strong>${hits}/${resolved.length} correct (${pct}%)</strong> on resolved live signals · `
-              + `${logs.length - resolved.length} awaiting outcome. `
-              + `Each signal was logged at prediction time — outcomes filled in once the horizon elapses.`;
+                `<strong>${hits}/${resolved.length} resolved correct (${pct}%)</strong> · `
+              + `${pendingCount} pending. Strong/Moderate conviction signals only.`;
         } else {
-            summaryEl.innerHTML = `${logs.length} signal${logs.length !== 1 ? 's' : ''} logged. Outcomes will appear once the horizon elapses.`;
+            summaryEl.innerHTML =
+                `<strong>${pendingCount} signal${pendingCount !== 1 ? 's' : ''} pending</strong> — no outcomes yet. `
+              + `Strong &amp; Moderate conviction only. Outcomes appear once the horizon elapses.`;
         }
 
         _liveLogData = logs;
@@ -1416,6 +1483,11 @@ async function checkOutcomes() {
 // ── INIT ──────────────────────────────────────────────────
 populateHorizons();
 initTickerAutocomplete();
+
+// Pre-load symbol from URL param e.g. index.html?symbol=NVDA
+const _urlSym = new URLSearchParams(window.location.search).get('symbol');
+if (_urlSym) document.getElementById('symbol-input').value = _urlSym.trim().toUpperCase();
+
 getPrediction();
 loadLiveLog();  // silently shows Live Log panel if Supabase is configured
 

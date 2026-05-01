@@ -801,7 +801,7 @@ def get_prediction(
 
     _predict_cache[cache_key] = (time.time(), response)
 
-    # Log all predictions to Supabase — screener and web both tracked
+    # Log all predictions for full model analysis (web, screener, bot scans)
     background_tasks.add_task(_log_to_supabase, response)
 
     return response
