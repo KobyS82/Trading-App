@@ -1310,6 +1310,7 @@ function onControlChange() {
 let _liveLogData   = [];
 let _liveLogSort   = { col: 'logged_at', dir: -1 };
 let _liveLogFilter = 'resolved';
+let _liveLogSource = 'all';
 let _liveLogLimit  = 50;
 const _CONV_RANK   = { Strong: 3, Moderate: 2, Weak: 1 };
 
@@ -1319,6 +1320,7 @@ function sortLiveLog(col) {
 }
 
 function setLiveLogFilter(f) { _liveLogFilter = f; renderLiveLog(); }
+function setLiveLogSource(v) { _liveLogSource = v; renderLiveLog(); }
 function setLiveLogLimit(v)  { _liveLogLimit  = parseInt(v); renderLiveLog(); }
 
 function renderLiveLog() {
@@ -1326,11 +1328,13 @@ function renderLiveLog() {
     const listEl = document.getElementById('live-log-list');
     if (!listEl) return;
 
-    const resolved = _liveLogData.filter(r => r.was_correct !== null && r.was_correct !== undefined);
-    const pending  = _liveLogData.filter(r => r.was_correct === null  || r.was_correct === undefined);
+    const sourceData = _liveLogSource === 'all' ? _liveLogData
+                     : _liveLogData.filter(r => (r.source ?? 'web') === _liveLogSource);
+    const resolved = sourceData.filter(r => r.was_correct !== null && r.was_correct !== undefined);
+    const pending  = sourceData.filter(r => r.was_correct === null  || r.was_correct === undefined);
     const display  = _liveLogFilter === 'resolved' ? resolved
                    : _liveLogFilter === 'pending'  ? pending
-                   : _liveLogData;
+                   : sourceData;
 
     const { col, dir } = _liveLogSort;
     const sorted = [...display].sort((a, b) => {
@@ -1348,13 +1352,18 @@ function renderLiveLog() {
         const active = _liveLogFilter === f;
         return `<button onclick="setLiveLogFilter('${f}')" style="padding:0.2rem 0.6rem;border-radius:20px;font-size:0.72rem;font-weight:600;cursor:pointer;border:1px solid ${active ? '#58a6ff' : '#30363d'};background:${active ? '#21262d' : 'transparent'};color:${active ? '#58a6ff' : '#8b949e'};">${label} (${count})</button>`;
     }
-    const limitSel = `<select onchange="setLiveLogLimit(this.value)" style="margin-left:auto;background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:0.15rem 0.4rem;font-size:0.72rem;cursor:pointer;">
+    const srcSel = `<select onchange="setLiveLogSource(this.value)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:0.15rem 0.4rem;font-size:0.72rem;cursor:pointer;">
+        ${[['all','All sources'],['web','Web'],['screener','Screener']].map(([v,l]) =>
+            `<option value="${v}" ${_liveLogSource===v?'selected':''}>${l}</option>`).join('')}
+    </select>`;
+    const limitSel = `<select onchange="setLiveLogLimit(this.value)" style="background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:6px;padding:0.15rem 0.4rem;font-size:0.72rem;cursor:pointer;">
         ${[25,50,100,0].map(v => `<option value="${v}" ${_liveLogLimit===v?'selected':''}>${v||'All'}</option>`).join('')}
     </select>`;
     const controlsHtml = `<div style="display:flex;gap:0.4rem;margin-bottom:0.75rem;flex-wrap:wrap;align-items:center;">
         ${tab('Resolved','resolved',resolved.length)}
         ${tab('Pending', 'pending', pending.length)}
-        ${tab('All',     'all',     _liveLogData.length)}
+        ${tab('All',     'all',     sourceData.length)}
+        ${srcSel}
         ${limitSel}
     </div>`;
 
@@ -1430,7 +1439,7 @@ async function loadLiveLog() {
     const baseUrl  = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
 
     try {
-        const res  = await fetch(`${baseUrl}/logs?limit=50`);
+        const res  = await fetch(`${baseUrl}/logs?limit=1000`);
         const data = await res.json();
         if (data.error || !data.logs || data.logs.length === 0) return;
 

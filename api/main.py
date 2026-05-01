@@ -54,7 +54,7 @@ def _sb_headers() -> dict:
     }
 
 
-def _log_to_supabase(data: dict) -> None:
+def _log_to_supabase(data: dict, source: str = "web") -> None:
     """Background task: insert a prediction record. Silently skips if Supabase is not configured."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return
@@ -68,6 +68,7 @@ def _log_to_supabase(data: dict) -> None:
             "predicted_pct":        data["predicted_change_pct"],
             "entry_price":          data["current_price"],
             "directional_accuracy": data["directional_accuracy"],
+            "source":               source,
         }
         with httpx.Client(timeout=6.0) as client:
             client.post(
@@ -802,7 +803,7 @@ def get_prediction(
     _predict_cache[cache_key] = (time.time(), response)
 
     # Log all predictions for full model analysis (web, screener, bot scans)
-    background_tasks.add_task(_log_to_supabase, response)
+    background_tasks.add_task(_log_to_supabase, response, source)
 
     return response
 
