@@ -176,6 +176,7 @@
         <option value="lgb">LightGBM</option>
         <option value="rf">Random Forest</option>
         <option value="linear">Linear</option>
+        <option value="adaptive">Adaptive LGB</option>
       </select>
     </div>
     <div class="tab-bar" id="horizon-tabs">
@@ -189,6 +190,14 @@
       <button class="tab-btn"        data-h="63"   onclick="setHorizon(63)">63d</button>
     </div>
     <div style="margin-left:auto; font-size:0.72rem; color:#484f58;" id="last-updated"></div>
+  </div>
+
+  <!-- Model Comparison -->
+  <div id="model-comparison" style="background:#161b22;border:1px solid #21262d;border-radius:8px;padding:0.85rem 1rem;margin-bottom:1rem;">
+    <div style="font-size:0.7rem;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.6rem;">All Models — Head-to-Head</div>
+    <div id="model-comparison-rows" style="display:flex;gap:1rem;flex-wrap:wrap;">
+      <span style="color:#484f58;font-size:0.78rem;">Loading…</span>
+    </div>
   </div>
 
   <!-- Summary Stats -->
@@ -326,6 +335,27 @@
     document.getElementById('lb-tbody').innerHTML = rows.join('');
   }
 
+  async function loadComparison() {
+    try {
+      const resp = await fetch(`${BASE_URL}/model-comparison`);
+      const json = await resp.json();
+      const models = json.models ?? [];
+      if (!models.length) return;
+      const el = document.getElementById('model-comparison-rows');
+      el.innerHTML = models.map(m => {
+        const daClass  = m.avg_da >= 55 ? '#3fb950' : m.avg_da >= 50 ? '#d29922' : '#f85149';
+        const wrText   = m.win_rate != null ? `${m.win_rate}% win rate (${m.resolved} outcomes)` : `${m.total} predictions, no outcomes yet`;
+        const wrColor  = m.win_rate == null ? '#484f58' : m.win_rate >= 55 ? '#3fb950' : m.win_rate >= 45 ? '#d29922' : '#f85149';
+        return `<div style="background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:0.5rem 0.75rem;min-width:160px;">
+          <div style="font-size:0.72rem;font-weight:700;color:#c9d1d9;margin-bottom:0.3rem;">${m.model}</div>
+          <div style="font-size:0.78rem;color:${daClass};font-weight:600;">Avg DA: ${m.avg_da}%</div>
+          <div style="font-size:0.7rem;color:${wrColor};margin-top:0.15rem;">${wrText}</div>
+          <div style="font-size:0.65rem;color:#484f58;margin-top:0.1rem;">${m.total.toLocaleString()} total predictions</div>
+        </div>`;
+      }).join('');
+    } catch (e) { /* silent */ }
+  }
+
   async function load() {
     document.getElementById('lb-tbody').innerHTML =
       `<tr><td colspan="8" class="status-row"><span class="spinner"></span>Loading…</td></tr>`;
@@ -351,6 +381,7 @@
   }
 
   load();
+  loadComparison();
 </script>
 </body>
 </html>

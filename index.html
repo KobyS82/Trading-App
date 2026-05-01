@@ -620,7 +620,7 @@
     <!-- FOOTNOTES -->
     <div class="footnotes">
         <p><strong>Directional Accuracy:</strong> walk-forward backtesting on data the model never saw (5 windows × ~80 days = 400 samples).
-        <p><strong>Conviction</strong> is based on LightGBM + Random Forest agreement only. Linear Regression is excluded because it is too simple to capture price dynamics reliably. Weak conviction is forced near earnings or Fed meetings regardless of accuracy. These are the two Machine Learning (ML) models; Linear Regression is a statistical baseline.</p>
+        <p><strong>Conviction</strong> is based on two ML model agreement: Random Forest + LightGBM (or Adaptive LGB when that mode is selected). Linear Regression is excluded — it is too simple to capture price dynamics reliably. Weak conviction is forced near earnings or Fed meetings regardless of accuracy. Strong = DA ≥ 55% and both ML models agree. Moderate = DA ≥ 52% and at least one agrees.</p>
         <p><strong>Adaptive LGB</strong> uses mutual information scoring to select the 12 most predictive features out of 22 for each individual ticker before training. Different stocks respond to different signals — NVDA may be driven by momentum while a utility stock is driven by mean-reversion — and dropping noisy features for a given ticker can improve directional accuracy at longer horizons.</p>
         <p><strong>Target Price</strong> is the current price ± the model's predicted % change over the selected horizon. <strong>P/C Ratio</strong> = nearest-expiry put/call volume (options market sentiment, display only). <strong>IV</strong> = per-ticker ATM implied volatility from the nearest expiry options chain — this is specific to the stock you are viewing. <strong>Mkt VIX</strong> = the CBOE S&P 500 Volatility Index, a market-wide fear gauge — not specific to any individual ticker. VIX &gt; 20 = elevated broad market volatility / inflated options premiums across all stocks.</p>
         <p style="margin-top:0.4rem; color:#30363d;">This is a directional bias filter for swing and options traders, not a real-time brokerage platform. Use the signal to establish a pre-trade directional lean, then open your broker's options chain to size and execute.</p>
@@ -1455,30 +1455,44 @@ async function loadLiveLog() {
     const baseUrl  = isLocal ? 'http://127.0.0.1:8000' : PROD_API;
 
     try {
-        const res  = await fetch(`${baseUrl}/logs?limit=1000`);
-        const data = await res.json();
-        if (data.error || !data.logs || data.logs.length === 0) return;
+        // Fetch resolved and pending separately so resolved records from weeks ago
+        // aren't crowded out by recent pending ones within a single limit window
+        const [resResolved, resPending] = await Promise.all([
+            fetch(`${baseUrl}/logs?limit=500&status=resolved`),
+            fetch(`${baseUrl}/logs?limit=300&status=pending`),
+        ]);
+        const [dataResolved, dataPending] = await Promise.all([
+            resResolved.json(),
+            resPending.json(),
+        ]);
+
+        const resolved = dataResolved.logs ?? [];
+        const pending  = dataPending.logs  ?? [];
+        if (resolved.length === 0 && pending.length === 0) return;
 
         // Show the section now that we know Supabase is configured
         document.getElementById('live-log-section').style.display = 'block';
 
-        const logs     = data.logs;
-        const resolved = logs.filter(r => r.was_correct !== null && r.was_correct !== undefined);
-        const hits     = resolved.filter(r => r.was_correct).length;
+        const hits = resolved.filter(r => r.was_correct).length;
         const summaryEl = document.getElementById('live-log-summary');
-        const pendingCount = logs.length - resolved.length;
         if (resolved.length > 0) {
             const pct = ((hits / resolved.length) * 100).toFixed(0);
             summaryEl.innerHTML =
                 `<strong>${hits}/${resolved.length} resolved correct (${pct}%)</strong> · `
-              + `${pendingCount} pending. Strong/Moderate conviction signals only.`;
+              + `${pending.length} pending.`;
         } else {
             summaryEl.innerHTML =
-                `<strong>${pendingCount} signal${pendingCount !== 1 ? 's' : ''} pending</strong> — no outcomes yet. `
-              + `Strong &amp; Moderate conviction only. Outcomes appear once the horizon elapses.`;
+                `<strong>${pending.length} signal${pending.length !== 1 ? 's' : ''} pending</strong> — no outcomes yet. `
+              + `Outcomes appear once the horizon elapses.`;
         }
 
-        _liveLogData = logs;
+        // Deduplicate by id in case a record appears in both fetches
+        const seen = new Set();
+        const combined = [];
+        for (const r of [...resolved, ...pending]) {
+            if (!seen.has(r.id)) { seen.add(r.id); combined.push(r); }
+        }
+        _liveLogData = combined;
         renderLiveLog();
     } catch (e) {
         // Supabase not configured or backend offline — section stays hidden

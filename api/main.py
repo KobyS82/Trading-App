@@ -227,10 +227,16 @@ def walk_forward_directional_accuracy(train_data, features, target_col, model_na
 
 def get_consensus_directions(train_data, features, target_col, today_data,
                               selected_model, selected_pred):
-    """Fit all 3 models (light settings for the non-selected ones) and return direction dict."""
+    """Fit all models (light settings for non-selected ones) and return direction dict.
+    When selected_model='adaptive', the LGB entry runs on the same MI-selected features
+    so it reflects the adaptive feature set rather than the full 22-feature baseline."""
+    # Use "Adaptive LGB" label for the LGB slot when running in adaptive mode
+    lgb_label = "Adaptive LGB" if selected_model == "adaptive" else "LightGBM"
     results = {}
-    for name, label in [("linear", "Linear"), ("rf", "Random Forest"), ("lgb", "LightGBM")]:
-        if name == selected_model:
+    for name, label in [("linear", "Linear"), ("rf", "Random Forest"), ("lgb", lgb_label)]:
+        # "adaptive" and "lgb" are both served by the LGB slot above
+        matches_selected = name == selected_model or (selected_model == "adaptive" and name == "lgb")
+        if matches_selected:
             p = selected_pred
         elif name == "rf":
             m = RandomForestRegressor(n_estimators=60, random_state=42, max_depth=5)
@@ -767,10 +773,11 @@ def get_prediction(
     )
     primary_dir    = "up" if pred_val >= 0 else "down"
     models_agreeing = sum(1 for d in consensus_results.values() if d == primary_dir)
-    # Conviction uses only the two ML models (Linear is too simple for noisy price data)
+    # Conviction uses only the two ML models (Linear excluded — too simple for price dynamics)
+    # "Adaptive LGB" is the label used when selected_model=adaptive; same slot as LightGBM
     ml_agreeing = sum(
         1 for label, d in consensus_results.items()
-        if label in ("Random Forest", "LightGBM") and d == primary_dir
+        if label in ("Random Forest", "LightGBM", "Adaptive LGB") and d == primary_dir
     )
 
     # --- SIGNAL + CONVICTION ---
@@ -918,20 +925,29 @@ def check_outcomes():
 
 
 @app.get("/logs")
-def get_logs(limit: int = 100):
-    """Return recent prediction log entries with outcomes where available."""
+def get_logs(limit: int = 100, status: str = "all"):
+    """Return prediction log entries.
+    status: 'resolved' (has outcome), 'pending' (no outcome yet), or 'all'."""
     if not SUPABASE_URL or not SUPABASE_KEY:
         return {"error": "Supabase not configured", "logs": []}
     try:
+        params: dict = {
+            "select": "*",
+            "limit":  str(min(limit, 5000)),
+        }
+        if status == "resolved":
+            params["was_correct"] = "not.is.null"
+            params["order"] = "outcome_at.desc"
+        elif status == "pending":
+            params["was_correct"] = "is.null"
+            params["order"] = "logged_at.desc"
+        else:
+            params["order"] = "logged_at.desc"
         with httpx.Client(timeout=8.0) as client:
             resp = client.get(
                 f"{SUPABASE_URL}/rest/v1/predictions",
                 headers=_sb_headers(),
-                params={
-                    "select": "*",
-                    "order":  "logged_at.desc",
-                    "limit":  str(min(limit, 2000)),
-                },
+                params=params,
             )
         return {"logs": resp.json()}
     except Exception as exc:
@@ -984,6 +1000,45 @@ def get_leaderboard(model: str = "lgb", horizon: int = 0):
         return {"entries": entries, "model": model_name}
     except Exception as exc:
         return {"error": str(exc), "entries": []}
+
+
+@app.get("/model-comparison")
+def get_model_comparison():
+    """Aggregate DA and outcome stats per model across all logged predictions."""
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return {"error": "Supabase not configured", "models": []}
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(
+                f"{SUPABASE_URL}/rest/v1/predictions",
+                headers=_sb_headers(),
+                params={"select": "model,directional_accuracy,was_correct,model_version", "limit": "50000"},
+            )
+        rows = resp.json() if isinstance(resp.json(), list) else []
+        from collections import defaultdict
+        buckets: dict = defaultdict(lambda: {"total": 0, "da_sum": 0.0, "resolved": 0, "correct": 0})
+        for r in rows:
+            m = r.get("model") or "Unknown"
+            buckets[m]["total"] += 1
+            buckets[m]["da_sum"] += r.get("directional_accuracy") or 0
+            if r.get("was_correct") is not None:
+                buckets[m]["resolved"] += 1
+                if r["was_correct"]:
+                    buckets[m]["correct"] += 1
+        result = []
+        for model_name, b in sorted(buckets.items()):
+            avg_da    = round(b["da_sum"] / b["total"], 1) if b["total"] else 0
+            win_rate  = round(b["correct"] / b["resolved"] * 100, 1) if b["resolved"] else None
+            result.append({
+                "model":      model_name,
+                "total":      b["total"],
+                "avg_da":     avg_da,
+                "resolved":   b["resolved"],
+                "win_rate":   win_rate,
+            })
+        return {"models": result}
+    except Exception as exc:
+        return {"error": str(exc), "models": []}
 
 
 @app.get("/paper-trades")
