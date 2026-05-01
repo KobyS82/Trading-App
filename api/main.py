@@ -780,6 +780,21 @@ def get_prediction(
         if label in ("Random Forest", "LightGBM", "Adaptive LGB") and d == primary_dir
     )
 
+    # --- ADAPTIVE DIRECTION (4th arrow, always shown regardless of selected model) ---
+    # Run feature selection + lightweight LGB on the ticker-tuned feature set.
+    # Computed AFTER ml_agreeing so it doesn't inflate conviction for non-adaptive modes.
+    if model != "adaptive":
+        try:
+            adapt_feats, _ = _select_features(train_data, all_features, 'Target_Future_Pct')
+            m_adapt = LGBMRegressor(n_estimators=100, learning_rate=0.05,
+                                    random_state=42, n_jobs=1, verbose=-1)
+            m_adapt.fit(train_data[adapt_feats], train_data['Target_Future_Pct'])
+            adapt_pred = m_adapt.predict(today_data[adapt_feats]).item()
+            consensus_results["Adaptive LGB"] = "up" if adapt_pred >= 0 else "down"
+            models_agreeing = sum(1 for d in consensus_results.values() if d == primary_dir)
+        except Exception:
+            pass  # non-critical — skip if feature selection fails
+
     # --- SIGNAL + CONVICTION ---
     today_earnings = int(today_data['Earnings_Flag'].item())
 
