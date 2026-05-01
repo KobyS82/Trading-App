@@ -518,7 +518,7 @@
             if (data.error) { setStatus('Error: ' + data.error, 'err'); return; }
 
             const open   = (data.trades || []).filter(t => t.status === 'open');
-            allClosed    = (data.trades || []).filter(t => t.status !== 'open');
+            allClosed    = (data.trades || []).filter(t => t.status !== 'open' && t.status !== 'cancelled');
 
             renderOpenTrades(open);
             renderClosedTrades(allClosed);

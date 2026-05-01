@@ -927,7 +927,8 @@ def get_paper_trades(status: str = "all", limit: int = 100):
                 params=params,
             )
         trades = resp.json()
-        closed = [t for t in trades if t.get("status") != "open"]
+        # Exclude cancelled (duplicates) from all stats — only real resolved trades count
+        closed = [t for t in trades if t.get("status") not in ("open", "cancelled")]
         total_pnl   = round(sum(t.get("outcome_pnl") or 0 for t in closed), 2)
         wins        = sum(1 for t in closed if (t.get("outcome_pnl") or 0) > 0)
         win_rate    = round(wins / len(closed) * 100, 1) if closed else None
