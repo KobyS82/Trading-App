@@ -33,8 +33,9 @@ async def lifespan(_app):
     _scheduler.add_job(auto_scan,               CronTrigger(day_of_week="mon-fri", hour=15,    minute=55,    timezone=_ET))
     _scheduler.add_job(_check_paper_trades_job, CronTrigger(day_of_week="mon-fri", hour="9-16",minute="*/30",timezone=_ET))
     _scheduler.add_job(check_outcomes,          CronTrigger(day_of_week="mon-fri", hour="10,16",minute=30,   timezone=_ET))
+    _scheduler.add_job(nightly_warmup,          CronTrigger(day_of_week="mon-fri", hour=23,    minute=0,     timezone=_ET))
     _scheduler.start()
-    print("[scheduler] Started — scans at 09:35, 12:30, 15:55 ET | paper trades every 30min 9-4 ET | outcomes scored 10:30 & 16:30 ET, Mon–Fri")
+    print("[scheduler] Started — scans at 09:35, 12:30, 15:55 ET | paper trades every 30min 9-4 ET | outcomes scored 10:30 & 16:30 ET | nightly warmup at 23:00 ET (22:00 CT), Mon–Fri")
     yield
     _scheduler.shutdown()
 
@@ -82,10 +83,13 @@ def _log_to_supabase(data: dict, source: str = "web") -> None:
     except Exception as exc:
         print(f"Supabase log failed: {exc}")
 
-# In-memory cache: (symbol, model, horizon) -> (timestamp, response)
+# In-memory cache: (symbol, model, horizon) -> (timestamp, response[, ttl_override])
 # Prevents the watchlist scanner from re-running expensive ML for every tab load.
 _predict_cache: dict = {}
-_CACHE_TTL_SEC = 30 * 60
+_CACHE_TTL_SEC = 30 * 60  # normal interactive TTL
+
+_WARMUP_MODELS   = ["lgb", "rf", "linear", "adaptive"]
+_WARMUP_HORIZONS = [1, 3, 5, 10, 21, 42, 63]
 
 # ── PAPER TRADING BOT ────────────────────────────────────────────────────────
 
@@ -574,6 +578,190 @@ def auto_scan() -> dict:
         _scan_lock.release()
 
 
+def nightly_warmup() -> None:
+    """Log predictions for every watchlist symbol × model × horizon to Supabase.
+    Runs at 23:00 ET (22:00 CT) Mon–Fri using closing prices — purely for leaderboard
+    and model head-to-head data. Does NOT touch the in-memory cache (stale close prices
+    are wrong to serve to morning users). Downloads data once per symbol and reuses it
+    across all model/horizon combos to minimise yfinance calls."""
+    import gc
+    total = len(SCAN_WATCHLIST) * len(_WARMUP_MODELS) * len(_WARMUP_HORIZONS)
+    print(f"[warmup] Starting — {total} combos "
+          f"({len(SCAN_WATCHLIST)} symbols × {len(_WARMUP_MODELS)} models × {len(_WARMUP_HORIZONS)} horizons)")
+    done = errors = 0
+
+    try:
+        vix = yf.download("^VIX", period="max", progress=False, auto_adjust=True).tail(2500)
+        if isinstance(vix.columns, pd.MultiIndex):
+            vix.columns = vix.columns.get_level_values(0)
+    except Exception as exc:
+        print(f"[warmup] VIX download failed, aborting: {exc}")
+        return
+
+    all_features = [
+        "SMA_50", "Today_Pct_Change", "RSI", "Vol_Change", "Daily_Range",
+        "Dist_From_200", "MACD", "Dist_BB_Upper", "Day_Of_Week",
+        "Lag_1", "Lag_2", "Gap_Pct",
+        "VIX_Close", "VIX_Change",
+        "Ret_5d", "Ret_10d", "Ret_20d", "Ret_63d",
+        "Vol_20d", "Above_200", "Earnings_Flag", "News_Sentiment",
+    ]
+    fomc_flag = is_near_fomc(days_window=3)
+
+    for symbol in SCAN_WATCHLIST:
+        try:
+            stock = yf.download(symbol, period="max", progress=False, auto_adjust=True).tail(2500)
+            if isinstance(stock.columns, pd.MultiIndex):
+                stock.columns = stock.columns.get_level_values(0)
+            if len(stock) < 300:
+                skipped += len(_WARMUP_MODELS) * len(_WARMUP_HORIZONS)
+                continue
+
+            # ── Feature engineering (once per symbol) ──────────────────────────
+            stock["VIX_Close"]        = vix["Close"]
+            stock["VIX_Change"]       = vix["Close"].pct_change() * 100
+            stock["SMA_50"]           = stock["Close"].rolling(50).mean()
+            stock["Today_Pct_Change"] = stock["Close"].pct_change() * 100
+            stock["Vol_Change"]       = stock["Volume"].pct_change() * 100
+            stock["Daily_Range"]      = (stock["High"] - stock["Low"]) / stock["Close"] * 100
+            stock["SMA_200"]          = stock["Close"].rolling(200).mean()
+            stock["Dist_From_200"]    = (stock["Close"] - stock["SMA_200"]) / stock["SMA_200"] * 100
+
+            delta = stock["Close"].diff()
+            gain  = delta.where(delta > 0, 0).rolling(14).mean()
+            loss  = (-delta.where(delta < 0, 0)).rolling(14).mean()
+            stock["RSI"] = 100 - (100 / (1 + gain / loss))
+
+            ema_12 = stock["Close"].ewm(span=12, adjust=False).mean()
+            ema_26 = stock["Close"].ewm(span=26, adjust=False).mean()
+            stock["MACD"] = ema_12 - ema_26
+
+            bb_mid   = stock["Close"].rolling(20).mean()
+            bb_std   = stock["Close"].rolling(20).std()
+            bb_upper = bb_mid + bb_std * 2
+            stock["Dist_BB_Upper"] = (stock["Close"] - bb_upper) / bb_upper * 100
+
+            stock["Day_Of_Week"] = stock.index.dayofweek
+            stock["Lag_1"]       = stock["Today_Pct_Change"].shift(1)
+            stock["Lag_2"]       = stock["Today_Pct_Change"].shift(2)
+            prev_close           = stock["Close"].shift(1)
+            stock["Gap_Pct"]     = (stock["Open"] - prev_close) / prev_close * 100
+
+            stock["Ret_5d"]    = stock["Close"].pct_change(5)  * 100
+            stock["Ret_10d"]   = stock["Close"].pct_change(10) * 100
+            stock["Ret_20d"]   = stock["Close"].pct_change(20) * 100
+            stock["Ret_63d"]   = stock["Close"].pct_change(63) * 100
+            stock["Vol_20d"]   = stock["Today_Pct_Change"].rolling(20).std()
+            stock["Above_200"] = (stock["Close"] > stock["SMA_200"]).astype(int)
+
+            # ── Earnings flag (needed for conviction logic) ────────────────────
+            stock["Earnings_Flag"] = 0
+            try:
+                edates = yf.Ticker(symbol).earnings_dates
+                if edates is not None and not edates.empty:
+                    idx_naive   = stock.index.tz_localize(None) if stock.index.tz else stock.index
+                    for edate in edates.index:
+                        e = pd.Timestamp(edate).tz_localize(None) if pd.Timestamp(edate).tz else pd.Timestamp(edate)
+                        mask = (idx_naive >= e - pd.Timedelta(days=5)) & (idx_naive <= e + pd.Timedelta(days=2))
+                        stock.loc[mask, "Earnings_Flag"] = 1
+            except Exception:
+                pass
+
+            # News sentiment = 0 for nightly run (not logged to Supabase anyway)
+            stock["News_Sentiment"] = 0.0
+            today_data     = stock.tail(1).copy()
+            price_val      = float(today_data["Close"].item())
+            today_earnings = int(today_data["Earnings_Flag"].item())
+
+            # ── Per-horizon loop ───────────────────────────────────────────────
+            for horizon in _WARMUP_HORIZONS:
+                stock_h = stock.copy()
+                stock_h["Target_Future_Pct"] = (
+                    stock_h["Close"].pct_change(horizon).shift(-horizon) * 100
+                )
+                train_data = stock_h.dropna().copy()
+                if len(train_data) < 300:
+                    skipped += len(_WARMUP_MODELS)
+                    continue
+
+                # Adaptive MI features computed ONCE per (symbol, horizon), reused across all 4 model iterations.
+                try:
+                    adapt_feats, _ = _select_features(train_data, all_features, "Target_Future_Pct")
+                except Exception:
+                    adapt_feats = all_features
+
+                # ── Per-model loop ─────────────────────────────────────────────
+                for model in _WARMUP_MODELS:
+                    try:
+                        if model == "adaptive":
+                            features = adapt_feats
+                        else:
+                            features = all_features
+
+                        ml_engine, model_name = build_model(model)
+                        ml_engine.fit(train_data[features], train_data["Target_Future_Pct"])
+                        pred_val = ml_engine.predict(today_data[features]).item()
+
+                        directional_accuracy, _, _ = walk_forward_directional_accuracy(
+                            train_data, features, "Target_Future_Pct", model
+                        )
+
+                        consensus_results, _ = get_consensus_directions(
+                            train_data, features, "Target_Future_Pct", today_data, model, pred_val
+                        )
+                        primary_dir = "up" if pred_val >= 0 else "down"
+                        ml_agreeing = sum(
+                            1 for label, d in consensus_results.items()
+                            if label in ("Random Forest", "LightGBM", "Adaptive LGB") and d == primary_dir
+                        )
+
+                        if abs(pred_val) < 0.05:
+                            signal = "HOLD"
+                        elif pred_val > 0:
+                            signal = "BUY"
+                        else:
+                            signal = "SELL"
+
+                        if today_earnings or fomc_flag:
+                            conviction = "Weak"
+                        elif directional_accuracy and directional_accuracy >= 55 and ml_agreeing == 2:
+                            conviction = "Strong"
+                        elif directional_accuracy and directional_accuracy >= 52 and ml_agreeing >= 1:
+                            conviction = "Moderate"
+                        else:
+                            conviction = "Weak"
+
+                        _log_to_supabase({
+                            "symbol":               symbol.upper(),
+                            "model_used":           model_name,
+                            "model_version":        MODEL_VERSIONS.get(model, "v1"),
+                            "horizon_days":         horizon,
+                            "signal":               signal,
+                            "conviction":           conviction,
+                            "predicted_change_pct": round(float(pred_val), 3),
+                            "current_price":        round(float(price_val), 2),
+                            "directional_accuracy": directional_accuracy,
+                        }, "nightly")
+                        done += 1
+                    except Exception as exc:
+                        errors += 1
+                        print(f"[warmup] {symbol}/{model}/{horizon}d: {exc}")
+
+        except Exception as exc:
+            errors += len(_WARMUP_MODELS) * len(_WARMUP_HORIZONS)
+            print(f"[warmup] {symbol} outer error: {exc}")
+        finally:
+            try:
+                del stock
+            except Exception:
+                pass
+            gc.collect()
+
+        time.sleep(0.5)
+
+    print(f"[warmup] Done — {done} cached, {skipped} skipped (already warm), {errors} errors")
+
+
 @app.get("/")
 def root():
     return {"status": "ok"}
@@ -592,9 +780,11 @@ def get_prediction(
     # --- CACHE CHECK ---
     cache_key = (symbol.upper(), model, horizon)
     cached = _predict_cache.get(cache_key)
-    if cached and (time.time() - cached[0]) < _CACHE_TTL_SEC:
-        print(f"Cache hit: {cache_key}")
-        return cached[1]
+    if cached:
+        _entry_ttl = cached[2] if len(cached) > 2 else _CACHE_TTL_SEC
+        if (time.time() - cached[0]) < _entry_ttl:
+            print(f"Cache hit: {cache_key}")
+            return cached[1]
 
     # --- DATA DOWNLOAD ---
     stock = yf.download(symbol, period='max', progress=False, auto_adjust=True).tail(2500)
