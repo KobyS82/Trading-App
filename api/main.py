@@ -588,7 +588,7 @@ def nightly_warmup() -> None:
     total = len(SCAN_WATCHLIST) * len(_WARMUP_MODELS) * len(_WARMUP_HORIZONS)
     print(f"[warmup] Starting — {total} combos "
           f"({len(SCAN_WATCHLIST)} symbols × {len(_WARMUP_MODELS)} models × {len(_WARMUP_HORIZONS)} horizons)")
-    done = errors = 0
+    done = errors = skipped = 0
 
     try:
         vix = yf.download("^VIX", period="max", progress=False, auto_adjust=True).tail(2500)
@@ -759,7 +759,7 @@ def nightly_warmup() -> None:
 
         time.sleep(0.5)
 
-    print(f"[warmup] Done — {done} cached, {skipped} skipped (already warm), {errors} errors")
+    print(f"[warmup] Done — {done} logged to Supabase, {skipped} skipped (insufficient data), {errors} errors")
 
 
 @app.get("/")
