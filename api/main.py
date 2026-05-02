@@ -98,7 +98,7 @@ SCAN_WATCHLIST = [
     "JPM","GS","MS","BAC","V","MA","PYPL","BRK-B",
 
     # Consumer / Retail
-    "WMT","HD","COST","TGT","AMZN","NKE","MCD","SBUX",
+    "WMT","HD","COST","TGT","NKE","MCD","SBUX",
 
     # Healthcare
     "JNJ","UNH","PFE","ABBV","LLY","MRK",
@@ -234,7 +234,7 @@ def get_consensus_directions(train_data, features, target_col, today_data,
     lgb_label = "Adaptive LGB" if selected_model == "adaptive" else "LightGBM"
     directions = {}
     predictions = {}
-    for name, label in [("linear", "Linear"), ("rf", "Random Forest"), ("lgb", lgb_label)]:
+    for name, label in [("linear", "Linear Regression"), ("rf", "Random Forest"), ("lgb", lgb_label)]:
         matches_selected = name == selected_model or (selected_model == "adaptive" and name == "lgb")
         if matches_selected:
             p = selected_pred
@@ -884,7 +884,7 @@ def get_prediction(
     # source="consensus" distinguishes these from direct user/bot selections.
     _label_to_model_key = {
         "LightGBM": "lgb", "Random Forest": "rf",
-        "Linear": "linear", "Adaptive LGB": "adaptive",
+        "Linear Regression": "linear", "Adaptive LGB": "adaptive",
     }
     for cons_label, cons_pred_pct in consensus_preds.items():
         if cons_label == model_name:
